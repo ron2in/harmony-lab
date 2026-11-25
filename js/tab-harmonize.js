@@ -648,7 +648,9 @@ function checkHarmonization() {
     }
 
     const spec = getChordSpec(cur.chordId, hState.key);
-    const isIncompleteTAfterD7 = (i > 0 && steps[i - 1].chordId === 'D7' && cur.chordId === 'T');
+    const isAllowedIncompleteT = (cur.chordId === 'T' && i > 0 && ['D', 'D7'].includes(steps[i - 1].chordId));
+    const expectedBassPc = spec.pcs[spec.bassDeg] !== undefined ? spec.pcs[spec.bassDeg] : spec.pcs[0];
+    const presentPcs = new Set(v.map(m => m % 12));
 
     if (isBassMode) {
       const refSpec = getChordSpec(cur.hint, hState.key);
@@ -660,17 +662,33 @@ function checkHarmonization() {
       if (i > 0 && steps[i - 1].voices[0] !== null && Math.abs(v[0] - steps[i - 1].voices[0]) > 7) {
         reports.push({ ok: false, msg: `Такт ${cur.bar}: слишком большой скачок в Сопрано (> квинты), старайтесь вести мелодию плавнее.` });
       }
-    } else if (!cur.isSusp && !spec.pcs.includes(v[0] % 12)) {
-      errSteps.add(i);
-      reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): нота мелодии ${midiToRuNoOct(v[0])} не входит в аккорд ${cur.chordId}.` });
-    } else if (!cur.isSusp) {
-      const allowedPcs = isIncompleteTAfterD7 ? [spec.pcs[0], spec.pcs[1]] : spec.pcs;
-      const badLower = [1, 2, 3].filter(vi => !spec.pcs.includes(v[vi] % 12));
-      if (badLower.length) {
+    } else {
+      if (!cur.isSusp && !spec.pcs.includes(v[0] % 12)) {
         errSteps.add(i);
-        reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): в голосах A/T/B есть неаккордовый звук для ${cur.chordId}.` });
-      } else if (!isIncompleteTAfterD7 && !allowedPcs.includes(v[1] % 12)) {
-        // full chord tones valid
+        reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): нота мелодии ${midiToRuNoOct(v[0])} не входит в аккорд ${cur.chordId}.` });
+      } else if (!cur.isSusp) {
+        const badLower = [1, 2, 3].filter(vi => !spec.pcs.includes(v[vi] % 12));
+        if (badLower.length) {
+          errSteps.add(i);
+          reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): в голосах A/T/B есть неаккордовый звук для ${cur.chordId}.` });
+        }
+      }
+
+      if ((v[3] % 12) !== expectedBassPc) {
+        errSteps.add(i);
+        reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): для аккорда ${cur.chordId} в басу должна быть нота ${midiToRuNoOct(expectedBassPc)}.` });
+      }
+    }
+
+    if (!cur.isSusp) {
+      if (isAllowedIncompleteT) {
+        if (!presentPcs.has(spec.pcs[0]) || !presentPcs.has(spec.pcs[1])) {
+          errSteps.add(i);
+          reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): в неполной тонике T после доминанты должны быть прима и терция.` });
+        }
+      } else if (!spec.pcs.every(pc => presentPcs.has(pc))) {
+        errSteps.add(i);
+        reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): в аккорде ${cur.chordId} пропущен один из тонов (неполный состав).` });
       }
     }
 
@@ -684,19 +702,30 @@ function checkHarmonization() {
       if (prev[0] !== null && prev[1] !== null && prev[2] !== null && prev[3] !== null) {
         const pairs = [[0,1,'S–A'],[0,2,'S–T'],[0,3,'S–B'],[1,2,'A–T'],[1,3,'A–B'],[2,3,'T–B']];
         pairs.forEach(([a, b, label]) => {
-          const iv1 = (prev[a] - prev[b]) % 12;
-          const iv2 = (v[a] - v[b]) % 12;
+          const iv1 = ((prev[a] - prev[b]) % 12 + 12) % 12;
+          const iv2 = ((v[a] - v[b]) % 12 + 12) % 12;
           if (prev[a] !== v[a] && prev[b] !== v[b]) {
+            const sameDir = Math.sign(v[a] - prev[a]) === Math.sign(v[b] - prev[b]);
             if (iv1 === 7 && iv2 === 7) {
               errSteps.add(i);
-              reports.push({ ok: false, msg: `Такт ${cur.bar}: параллельные квинты в голосах ${label}.` });
+              reports.push({ ok: false, msg: `Такт ${cur.bar}: ${sameDir ? 'параллельные квинты' : 'противоположные квинты (антипараллелизм)'} в голосах ${label}.` });
             }
             if (iv1 === 0 && iv2 === 0) {
               errSteps.add(i);
-              reports.push({ ok: false, msg: `Такт ${cur.bar}: параллельные октавы в голосах ${label}.` });
+              reports.push({ ok: false, msg: `Такт ${cur.bar}: ${sameDir ? 'параллельные октавы' : 'противоположные октавы (антипараллелизм)'} в голосах ${label}.` });
             }
           }
         });
+
+        if (['D7', 'D65', 'D43', 'D2'].includes(steps[i - 1].chordId)) {
+          const septPc = (hState.key.root + 5) % 12;
+          for (let vi = 1; vi <= 3; vi++) {
+            if ((prev[vi] % 12) === septPc && v[vi] > prev[vi]) {
+              errSteps.add(i);
+              reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): септима аккорда ${steps[i - 1].chordId} должна разрешаться вниз, а не идти вверх.` });
+            }
+          }
+        }
       }
     }
   }
