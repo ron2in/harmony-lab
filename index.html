@@ -376,6 +376,7 @@
     .step-card.step-err { border-color: var(--danger); background: rgba(239,68,68,0.08); }
     .step-card.step-ok { border-color: rgba(34,197,94,0.45); }
     .step-card.step-playing { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+    .step-card.step-kbd-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); background: rgba(56,189,248,0.08); }
 
     .voice-ctrl {
       display: flex; justify-content: space-between; align-items: center; font-size: 11px;
@@ -857,8 +858,10 @@
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-primary" id="hGenBtn">↻ Новая мелодия</button>
+            <button class="btn" id="hPlayMelodyBtn">▶ Только мелодия</button>
             <button class="btn" id="hPlayAllBtn">▶ Прослушать задачу</button>
             <button class="btn btn-success" id="hCheckBtn">✓ Сдать работу (Проверить)</button>
+            <button class="btn btn-ghost" id="hShowRefBtn">✨ Показать эталонное решение</button>
           </div>
         </div>
 
@@ -886,6 +889,15 @@
           <!-- Custom Parameter Constructor -->
           <aside class="card">
             <h3 style="font-size:13px; color:var(--accent); margin-bottom:10px;">Конструктор параметров задачи</h3>
+
+            <div class="param-group">
+              <label class="param-label" for="hWorkMode">Режим работы задачи:</label>
+              <select id="hWorkMode" class="daw-select" style="width:100%;">
+                <option value="scratch" selected>С нуля (только мелодия Сопрано)</option>
+                <option value="semi">Выбор функций (голоса строятся автоматически с правкой)</option>
+                <option value="draft">Готовый черновик (правка и анализ)</option>
+              </select>
+            </div>
 
             <div class="param-group">
               <label class="param-label" for="hSpacingRule">Расположение голосов:</label>
@@ -1421,6 +1433,7 @@
     function syncPianoMode() {
       const isTrainer = document.getElementById('sec-trainer').classList.contains('active');
       const isBasics = document.getElementById('sec-basics').classList.contains('active');
+      const isHarmonize = document.getElementById('sec-harmonize').classList.contains('active');
       const isFormulas = document.getElementById('sec-formulas').classList.contains('active');
       const isSandbox = document.getElementById('sec-sandbox').classList.contains('active');
       if (isTrainer) {
@@ -1430,6 +1443,13 @@
       } else if (isBasics) {
         document.getElementById('pianoModeBadge').textContent = 'Режим ответа (нажмите услышанную или показанную ноту)';
         pianoUI.onNoteSelect = handleBasicsPianoInput;
+        pianoUI.setAccidentalMode('sharp');
+      } else if (isHarmonize) {
+        const kbdActive = (typeof hState !== 'undefined' && hState.kbdStepIdx >= 0);
+        document.getElementById('pianoModeBadge').textContent = kbdActive
+          ? `Ввод 3 нот (Бас, Тенор, Альт) для такта ${hState.steps[hState.kbdStepIdx].bar}`
+          : 'Режим свободной игры (нажмите «🎹 С клавиш» в шаге для ввода нот)';
+        pianoUI.onNoteSelect = kbdActive ? handleHarmonizePianoInput : null;
         pianoUI.setAccidentalMode('sharp');
       } else {
         document.getElementById('pianoModeBadge').textContent = 'Режим свободной игры';
@@ -2266,8 +2286,10 @@
     const hState = {
       level: 1,
       key: { root: 0, mode: 'major', name: 'До мажор' },
-      steps: [], // [{ bar, beat, soprano, chordId, spacing, voices:[S,A,T,B], isSusp, hintChord }]
-      playingIdx: -1
+      steps: [], // [{ bar, beat, soprano, chordId, spacing, voices:[S,A,T,B], isSusp, hint }]
+      playingIdx: -1,
+      kbdStepIdx: -1,
+      kbdBuffer: []
     };
 
     function getChordSpec(chordId, keyObj) {
@@ -2399,23 +2421,44 @@
         plan[5].susp = true;
       }
 
-      hState.steps = plan.map((item, idx) => {
+      const workMode = document.getElementById('hWorkMode').value;
+      const allowed = preset.allowedChords;
+      hState.kbdStepIdx = -1;
+      hState.kbdBuffer = [];
+
+      hState.steps = plan.map((item) => {
         const semi = item.deg === 'sharp4' ? 6 : sc[item.deg];
         let sop = base + semi;
         if (sop > 79) sop -= 12;
         if (sop < 62) sop += 12;
-        // Start with T for all steps so user chooses, or pre-fill step 0 with T
-        const defaultChord = idx === 0 ? 'T' : 'T';
+
+        const refChord = (H_CHORD_CATALOG[item.hint] && allowed.includes(item.hint)) ? item.hint : 'T';
+        if (workMode === 'draft') {
+          return {
+            bar: Math.floor(plan.indexOf(item) / 2) + 1,
+            beat: (plan.indexOf(item) % 2) === 0 ? 'сильная' : 'слабая',
+            soprano: sop,
+            chordId: refChord,
+            spacing: initSpacing,
+            voices: autoVoiceStep(sop, refChord, initSpacing, key),
+            isSusp: item.susp,
+            hint: refChord
+          };
+        }
         return {
-          bar: Math.floor(idx / 2) + 1,
-          beat: (idx % 2) === 0 ? 'сильная' : 'слабая',
+          bar: 1,
+          beat: 'сильная',
           soprano: sop,
-          chordId: defaultChord,
+          chordId: '',
           spacing: initSpacing,
-          voices: autoVoiceStep(sop, defaultChord, initSpacing, key),
+          voices: [sop, null, null, null],
           isSusp: item.susp,
-          hint: item.hint
+          hint: refChord
         };
+      });
+      hState.steps.forEach((st, idx) => {
+        st.bar = Math.floor(idx / 2) + 1;
+        st.beat = (idx % 2) === 0 ? 'сильная' : 'слабая';
       });
 
       document.getElementById('hTaskMeta').innerHTML = `
@@ -2424,9 +2467,14 @@
         <span style="color:var(--text-dim);">Доступно аккордов: ${preset.allowedChords.length}</span>
       `;
 
+      syncPianoMode();
       renderHarmonizeUI();
-      if (document.getElementById('hStrictness').value === 'soft') {
+      if (workMode === 'draft' && document.getElementById('hStrictness').value === 'soft') {
         checkHarmonization();
+      } else if (workMode === 'scratch') {
+        document.getElementById('hCheckReport').innerHTML = `<div class="report-row info">Режим «С нуля»: выберите функции аккордов и задайте Альт, Тенор и Бас кнопками ▲/▼ или «🎹 С клавиш».</div>`;
+      } else if (workMode === 'semi') {
+        document.getElementById('hCheckReport').innerHTML = `<div class="report-row info">Режим «Выбор функций»: выберите аккорд в каждом шаге — голоса построятся автоматически.</div>`;
       } else {
         document.getElementById('hCheckReport').innerHTML = `<div class="report-row info">Экзаменационный режим: расставьте аккорды и нажмите «Сдать работу (Проверить)».</div>`;
       }
@@ -2464,8 +2512,9 @@
           out += `<rect x="${cx - 14}" y="26" width="28" height="162" rx="4" fill="rgba(56,189,248,0.14)"/>`;
         }
 
-        // Draw 4 voices: S, A on treble; T, B on bass
+        // Draw voices that are set (S, A on treble; T, B on bass)
         st.voices.forEach((midi, vIdx) => {
+          if (midi === null || midi === undefined) return;
           const pc = ((midi % 12) + 12) % 12;
           const oct = Math.floor(midi / 12) - 1;
           const info = PC_SHARP[pc];
@@ -2478,10 +2527,30 @@
           out += `<ellipse cx="${cx}" cy="${y}" rx="5.5" ry="3.9" transform="rotate(-16 ${cx} ${y})" fill="${color}"/>`;
         });
 
-        out += `<text x="${cx}" y="206" text-anchor="middle" fill="${isErr ? '#f87171' : '#94a3b8'}" font-size="10" font-family="monospace">${st.chordId}</text>`;
+        out += `<text x="${cx}" y="206" text-anchor="middle" fill="${isErr ? '#f87171' : '#94a3b8'}" font-size="10" font-family="monospace">${st.chordId || '—'}</text>`;
       });
 
       svg.innerHTML = out;
+    }
+
+    function handleHarmonizePianoInput(midi) {
+      if (hState.kbdStepIdx < 0 || !hState.steps[hState.kbdStepIdx]) return;
+      hState.kbdBuffer.push(midi);
+      if (hState.kbdBuffer.length < 3) {
+        syncPianoMode();
+        renderHarmonizeUI();
+        return;
+      }
+      const sorted = [...hState.kbdBuffer].sort((a, b) => a - b); // [Bass, Tenor, Alto]
+      const step = hState.steps[hState.kbdStepIdx];
+      step.voices[3] = sorted[0];
+      step.voices[2] = sorted[1];
+      step.voices[1] = sorted[2];
+      hState.kbdStepIdx = -1;
+      hState.kbdBuffer = [];
+      syncPianoMode();
+      audio.playChord(step.voices.filter(x => x !== null), 0.78, 0);
+      onHarmonizeEdited();
     }
 
     function renderHarmonizeUI(errStepSet = new Set()) {
@@ -2489,16 +2558,22 @@
       grid.innerHTML = '';
       const allowed = H_LEVEL_PRESETS[hState.level].allowedChords;
       const spacingRule = document.getElementById('hSpacingRule').value;
+      const workMode = document.getElementById('hWorkMode').value;
 
       hState.steps.forEach((st, idx) => {
+        const isKbdActive = hState.kbdStepIdx === idx;
         const card = document.createElement('div');
         card.className = 'step-card'
           + (errStepSet.has(idx) ? ' step-err' : '')
-          + (idx === hState.playingIdx ? ' step-playing' : '');
+          + (idx === hState.playingIdx ? ' step-playing' : '')
+          + (isKbdActive ? ' step-kbd-active' : '');
 
-        const chordOpts = allowed.map(cid =>
-          `<option value="${cid}" ${st.chordId === cid ? 'selected' : ''}>${H_CHORD_CATALOG[cid].label}</option>`
-        ).join('');
+        const chordOpts = `<option value="" ${st.chordId === '' ? 'selected' : ''}>— Аккорд —</option>`
+          + allowed.map(cid =>
+              `<option value="${cid}" ${st.chordId === cid ? 'selected' : ''}>${H_CHORD_CATALOG[cid].label}</option>`
+            ).join('');
+
+        const fmtV = m => (m === null || m === undefined) ? '—' : midiToRu(m);
 
         card.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
@@ -2512,32 +2587,38 @@
             <option value="wide" ${st.spacing==='wide'?'selected':''}>Широкое</option>
           </select>
           <div class="voice-ctrl">
-            <span>A: <strong class="mono">${midiToRu(st.voices[1])}</strong></span>
+            <span>A: <strong class="mono">${fmtV(st.voices[1])}</strong></span>
             <div class="voice-btns">
               <button class="v-btn" data-vshift="${idx}:1:1">▲</button>
               <button class="v-btn" data-vshift="${idx}:1:-1">▼</button>
             </div>
           </div>
           <div class="voice-ctrl">
-            <span>T: <strong class="mono">${midiToRu(st.voices[2])}</strong></span>
+            <span>T: <strong class="mono">${fmtV(st.voices[2])}</strong></span>
             <div class="voice-btns">
               <button class="v-btn" data-vshift="${idx}:2:1">▲</button>
               <button class="v-btn" data-vshift="${idx}:2:-1">▼</button>
             </div>
           </div>
           <div class="voice-ctrl">
-            <span>B: <strong class="mono">${midiToRu(st.voices[3])}</strong></span>
+            <span>B: <strong class="mono">${fmtV(st.voices[3])}</strong></span>
             <div class="voice-btns">
               <button class="v-btn" data-vshift="${idx}:3:1">▲</button>
               <button class="v-btn" data-vshift="${idx}:3:-1">▼</button>
             </div>
           </div>
+          <button class="btn btn-sm ${isKbdActive ? 'btn-primary' : 'btn-ghost'}" data-hkbd="${idx}" style="width:100%; margin-top:2px; font-size:11px;">
+            ${isKbdActive ? `🎹 Ноты (${hState.kbdBuffer.length}/3)` : '🎹 С клавиш'}
+          </button>
         `;
 
         card.querySelector(`[data-hchord="${idx}"]`).addEventListener('change', e => {
           st.chordId = e.target.value;
-          st.voices = autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
-          audio.playChord(st.voices, 0.75, 0);
+          if (st.chordId && (workMode === 'semi' || workMode === 'draft')) {
+            st.voices = autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
+          }
+          const playable = st.voices.filter(x => x !== null);
+          if (playable.length) audio.playChord(playable, 0.75, 0);
           onHarmonizeEdited();
         });
 
@@ -2545,8 +2626,11 @@
         if (spacingRule === 'tight' || spacingRule === 'wide') spSel.disabled = true;
         spSel.addEventListener('change', e => {
           st.spacing = e.target.value;
-          st.voices = autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
-          audio.playChord(st.voices, 0.75, 0);
+          if (st.chordId && (workMode === 'semi' || workMode === 'draft')) {
+            st.voices = autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
+          }
+          const playable = st.voices.filter(x => x !== null);
+          if (playable.length) audio.playChord(playable, 0.75, 0);
           onHarmonizeEdited();
         });
 
@@ -2554,13 +2638,34 @@
           vb.addEventListener('click', () => {
             const [sIdx, vIdx, dir] = vb.dataset.vshift.split(':').map(Number);
             const stepObj = hState.steps[sIdx];
-            const spec = getChordSpec(stepObj.chordId, hState.key);
-            let m = stepObj.voices[vIdx] + dir;
-            while (m >= 40 && m <= 79 && !spec.pcs.includes(m % 12)) m += dir;
-            if (spec.pcs.includes(m % 12)) stepObj.voices[vIdx] = m;
-            audio.playChord(stepObj.voices, 0.7, 0);
+            const defaults = { 1: Math.min(65, stepObj.soprano - 3), 2: 60, 3: 48 };
+            if (stepObj.voices[vIdx] === null) {
+              stepObj.voices[vIdx] = defaults[vIdx];
+            } else if (stepObj.chordId) {
+              const spec = getChordSpec(stepObj.chordId, hState.key);
+              let m = stepObj.voices[vIdx] + dir;
+              while (m >= 36 && m <= 81 && !spec.pcs.includes(m % 12)) m += dir;
+              if (spec.pcs.includes(m % 12)) stepObj.voices[vIdx] = m;
+            } else {
+              const nextM = stepObj.voices[vIdx] + dir;
+              if (nextM >= 36 && nextM <= 81) stepObj.voices[vIdx] = nextM;
+            }
+            audio.playChord(stepObj.voices.filter(x => x !== null), 0.7, 0);
             onHarmonizeEdited();
           });
+        });
+
+        card.querySelector(`[data-hkbd="${idx}"]`).addEventListener('click', () => {
+          if (hState.kbdStepIdx === idx) {
+            hState.kbdStepIdx = -1;
+            hState.kbdBuffer = [];
+          } else {
+            hState.kbdStepIdx = idx;
+            hState.kbdBuffer = [];
+            if (document.body.classList.contains('is-mobile')) setPianoCollapsed(false);
+          }
+          syncPianoMode();
+          renderHarmonizeUI(errStepSet);
         });
 
         grid.appendChild(card);
@@ -2582,10 +2687,19 @@
       const reports = [];
       const errSteps = new Set();
 
-      // 1. Voice leading: parallel 5ths/8ves, crossings, melody fit
+      // 1. Voice leading: completeness, parallel 5ths/8ves, crossings, melody fit
+      const incompleteBars = [];
       for (let i = 0; i < steps.length; i++) {
         const cur = steps[i];
         const v = cur.voices; // [S, A, T, B]
+        const missingVoices = (v[1] === null || v[2] === null || v[3] === null);
+
+        if (!cur.chordId || missingVoices) {
+          errSteps.add(i);
+          incompleteBars.push(`Т.${cur.bar} (${cur.beat})`);
+          continue;
+        }
+
         const spec = getChordSpec(cur.chordId, hState.key);
 
         if (!cur.isSusp && !spec.pcs.includes(v[0] % 12)) {
@@ -2600,22 +2714,28 @@
 
         if (i > 0) {
           const prev = steps[i - 1].voices;
-          const pairs = [[0,1,'S–A'],[0,2,'S–T'],[0,3,'S–B'],[1,2,'A–T'],[1,3,'A–B'],[2,3,'T–B']];
-          pairs.forEach(([a, b, label]) => {
-            const iv1 = (prev[a] - prev[b]) % 12;
-            const iv2 = (v[a] - v[b]) % 12;
-            if (prev[a] !== v[a] && prev[b] !== v[b]) {
-              if (iv1 === 7 && iv2 === 7) {
-                errSteps.add(i);
-                reports.push({ ok: false, msg: `Такт ${cur.bar}: параллельные квинты в голосах ${label}.` });
+          if (prev[1] !== null && prev[2] !== null && prev[3] !== null) {
+            const pairs = [[0,1,'S–A'],[0,2,'S–T'],[0,3,'S–B'],[1,2,'A–T'],[1,3,'A–B'],[2,3,'T–B']];
+            pairs.forEach(([a, b, label]) => {
+              const iv1 = (prev[a] - prev[b]) % 12;
+              const iv2 = (v[a] - v[b]) % 12;
+              if (prev[a] !== v[a] && prev[b] !== v[b]) {
+                if (iv1 === 7 && iv2 === 7) {
+                  errSteps.add(i);
+                  reports.push({ ok: false, msg: `Такт ${cur.bar}: параллельные квинты в голосах ${label}.` });
+                }
+                if (iv1 === 0 && iv2 === 0) {
+                  errSteps.add(i);
+                  reports.push({ ok: false, msg: `Такт ${cur.bar}: параллельные октавы в голосах ${label}.` });
+                }
               }
-              if (iv1 === 0 && iv2 === 0) {
-                errSteps.add(i);
-                reports.push({ ok: false, msg: `Такт ${cur.bar}: параллельные октавы в голосах ${label}.` });
-              }
-            }
-          });
+            });
+          }
         }
+      }
+
+      if (incompleteBars.length) {
+        reports.unshift({ ok: false, msg: `Не выбрана функция или не достроены голоса A, T, B в шагах: ${incompleteBars.join(', ')}.` });
       }
 
       // 2. Spacing rule check
@@ -2667,31 +2787,53 @@
       repEl.innerHTML = reports.map(r => `<div class="report-row ${r.ok ? 'ok' : 'err'}">${r.ok ? '✓' : '✕'} ${r.msg}</div>`).join('');
     }
 
-    document.querySelectorAll('#hLevelGrid .level-card').forEach(btn => {
-      btn.addEventListener('click', () => applyLevelPreset(Number(btn.dataset.lvl)));
-    });
-    document.getElementById('hGenBtn').addEventListener('click', generateHarmonizeTask);
-    document.getElementById('hCheckBtn').addEventListener('click', checkHarmonization);
-    document.getElementById('hSpacingRule').addEventListener('change', () => {
-      const rule = document.getElementById('hSpacingRule').value;
-      if (rule === 'tight' || rule === 'wide') {
-        hState.steps.forEach(s => { s.spacing = rule; s.voices = autoVoiceStep(s.soprano, s.chordId, rule, hState.key); });
-      }
-      onHarmonizeEdited();
-    });
-    document.getElementById('hStrictness').addEventListener('change', onHarmonizeEdited);
-    document.getElementById('hPlayAllBtn').addEventListener('click', () => {
+    function playHarmonizeSequence(melodyOnly = false) {
       hState.steps.forEach((st, idx) => {
         setTimeout(() => {
           hState.playingIdx = idx;
           renderHarmonizeUI();
-          audio.playChord(st.voices, 0.72, 0);
+          const notes = melodyOnly ? [st.soprano] : st.voices.filter(x => x !== null);
+          if (notes.length) audio.playChord(notes, 0.72, 0);
           if (idx === hState.steps.length - 1) {
             setTimeout(() => { hState.playingIdx = -1; renderHarmonizeUI(); }, 760);
           }
         }, idx * 780);
       });
+    }
+
+    document.querySelectorAll('#hLevelGrid .level-card').forEach(btn => {
+      btn.addEventListener('click', () => applyLevelPreset(Number(btn.dataset.lvl)));
     });
+    document.getElementById('hWorkMode').addEventListener('change', generateHarmonizeTask);
+    document.getElementById('hGenBtn').addEventListener('click', generateHarmonizeTask);
+    document.getElementById('hCheckBtn').addEventListener('click', checkHarmonization);
+    document.getElementById('hPlayMelodyBtn').addEventListener('click', () => playHarmonizeSequence(true));
+    document.getElementById('hPlayAllBtn').addEventListener('click', () => playHarmonizeSequence(false));
+    document.getElementById('hShowRefBtn').addEventListener('click', () => {
+      const rule = document.getElementById('hSpacingRule').value;
+      const spacing = rule === 'wide' ? 'wide' : 'tight';
+      hState.kbdStepIdx = -1;
+      hState.kbdBuffer = [];
+      hState.steps.forEach((s, idx) => {
+        s.chordId = H_CHORD_CATALOG[s.hint] ? s.hint : 'T';
+        s.spacing = (rule === 'change' && idx >= Math.floor(hState.steps.length / 2)) ? 'wide' : spacing;
+        s.voices = autoVoiceStep(s.soprano, s.chordId, s.spacing, hState.key);
+      });
+      syncPianoMode();
+      checkHarmonization();
+      playHarmonizeSequence(false);
+    });
+    document.getElementById('hSpacingRule').addEventListener('change', () => {
+      const rule = document.getElementById('hSpacingRule').value;
+      if (rule === 'tight' || rule === 'wide') {
+        hState.steps.forEach(s => {
+          s.spacing = rule;
+          if (s.chordId && s.voices[1] !== null) s.voices = autoVoiceStep(s.soprano, s.chordId, rule, hState.key);
+        });
+      }
+      onHarmonizeEdited();
+    });
+    document.getElementById('hStrictness').addEventListener('change', onHarmonizeEdited);
 
     applyLevelPreset(1);
 
