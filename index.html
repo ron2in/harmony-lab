@@ -506,6 +506,22 @@
     .quiz-key-btn:hover { border-color:var(--accent); }
     .quiz-key-btn.correct { background:rgba(34,197,94,0.18); border-color:var(--success); color:#86efac; }
     .quiz-key-btn.wrong { background:rgba(239,68,68,0.18); border-color:var(--danger); color:#fca5a5; }
+
+    /* Ear Dictations */
+    .dict-slots { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:12px; }
+    .dict-slot { background:var(--bg-app); border:1px dashed var(--border-light); border-radius:var(--radius-sm); padding:10px 6px; text-align:center; font-family:var(--font-mono); font-weight:700; font-size:14px; cursor:pointer; min-height:44px; display:grid; place-items:center; transition:0.13s; }
+    .dict-slot.filled { border-style:solid; border-color:var(--accent); color:var(--accent); }
+    .dict-slot.correct { border-color:var(--success); background:rgba(34,197,94,0.16); color:#86efac; }
+    .dict-slot.wrong { border-color:var(--danger); background:rgba(239,68,68,0.16); color:#fca5a5; }
+    .dict-palette { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-bottom:12px; }
+
+    /* 4-Part Mixer (Solo / Mute + Timbre) */
+    .harm-mixer { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; background:var(--bg-app); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:10px; }
+    .mixer-channels { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .mixer-ch { display:inline-flex; align-items:center; gap:4px; background:var(--bg-card); border:1px solid var(--border); border-radius:6px; padding:3px 6px; font-size:11.5px; font-weight:700; }
+    .mx-btn { border:1px solid var(--border); background:var(--bg-elevated); color:var(--text-muted); border-radius:4px; width:22px; height:22px; font-size:10.5px; font-weight:800; cursor:pointer; display:grid; place-items:center; font-family:inherit; }
+    .mx-btn.m-on { background:rgba(239,68,68,0.22); border-color:var(--danger); color:#fca5a5; }
+    .mx-btn.s-on { background:rgba(251,191,36,0.22); border-color:var(--subdom); color:#fde68a; }
   </style>
 </head>
 <body>
@@ -765,6 +781,8 @@
               <option value="intervals_basic">Интервалы базовые (ч1, м2, б2, м3, б3, ч4, ч5, ч8)</option>
               <option value="intervals_all">Все интервалы (ч1 – ч8 + тритон)</option>
               <option value="degrees">Ступени в ладу (I–VII)</option>
+              <option value="harm_dict">Гармонический диктант (цепочка из 4 аккордов)</option>
+              <option value="mel_dict">Мелодический диктант (4–6 нот)</option>
             </select>
             <div class="ear-dir-row" id="eIntervalDirRow" style="display:none;">
               <span style="font-size:12px;color:var(--text-muted);">Направление:</span>
@@ -772,6 +790,13 @@
                 <option value="up">Мелодически вверх</option>
                 <option value="down">Мелодически вниз</option>
                 <option value="harm">Гармонически</option>
+              </select>
+            </div>
+            <div class="ear-dir-row" id="eMelLenRow" style="display:none;">
+              <span style="font-size:12px;color:var(--text-muted);">Длина:</span>
+              <select id="eMelLenSelect" class="daw-select">
+                <option value="4" selected>4 ноты</option>
+                <option value="6">6 нот</option>
               </select>
             </div>
           </div>
@@ -792,6 +817,29 @@
             </div>
 
             <div class="answers-grid" id="eAnswersGrid"></div>
+
+            <!-- Harmonic Dictation UI -->
+            <div id="eHarmDictBox" style="display:none;">
+              <div class="dict-slots" id="eHarmSlots"></div>
+              <div class="dict-palette" id="eHarmPalette"></div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+                <button class="btn btn-success" id="eHarmCheckBtn">✓ Проверить</button>
+                <button class="btn" id="eHarmSlowBtn">♫ Послушать по аккордам (медленно)</button>
+                <button class="btn btn-ghost" id="eHarmClearBtn">↺ Очистить</button>
+              </div>
+            </div>
+
+            <!-- Melodic Dictation UI -->
+            <div id="eMelDictBox" style="display:none;">
+              <div class="staff-box" style="padding:8px; margin-bottom:10px;">
+                <svg id="eMelStaffSvg" viewBox="0 0 360 140" style="width:100%; max-width:380px; height:auto; display:block;" xmlns="http://www.w3.org/2000/svg"></svg>
+              </div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center;">
+                <button class="btn btn-success" id="eMelCheckBtn">✓ Проверить</button>
+                <button class="btn" id="eMelBackBtn">⌫ Стереть последнюю ноту</button>
+                <button class="btn btn-ghost" id="eMelClearBtn">↺ Очистить</button>
+              </div>
+            </div>
           </div>
 
           <div class="card">
@@ -963,6 +1011,22 @@
 
           <!-- Score & 4-Part Editor -->
           <div class="card">
+            <div class="harm-mixer">
+              <div class="mixer-channels" id="hMixerChannels">
+                <div class="mixer-ch"><span>S</span><button class="mx-btn" data-hmx="0:m" title="Mute Сопрано">M</button><button class="mx-btn" data-hmx="0:s" title="Solo Сопрано">S</button></div>
+                <div class="mixer-ch"><span>A</span><button class="mx-btn" data-hmx="1:m" title="Mute Альт">M</button><button class="mx-btn" data-hmx="1:s" title="Solo Альт">S</button></div>
+                <div class="mixer-ch"><span>T</span><button class="mx-btn" data-hmx="2:m" title="Mute Тенор">M</button><button class="mx-btn" data-hmx="2:s" title="Solo Тенор">S</button></div>
+                <div class="mixer-ch"><span>B</span><button class="mx-btn" data-hmx="3:m" title="Mute Бас">M</button><button class="mx-btn" data-hmx="3:s" title="Solo Бас">S</button></div>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px; font-size:12px;">
+                <span style="color:var(--text-muted);">Тембр:</span>
+                <select id="hTimbreSelect" class="daw-select">
+                  <option value="epiano">Электропиано</option>
+                  <option value="strings">Струнный ансамбль</option>
+                  <option value="organ">Орган</option>
+                </select>
+              </div>
+            </div>
             <div class="score-staff-wrap">
               <svg id="hScoreSvg" viewBox="0 0 760 220" style="width:100%; min-width:560px; height:auto; display:block;" xmlns="http://www.w3.org/2000/svg"></svg>
             </div>
@@ -1165,46 +1229,77 @@
         this.volume = v;
         if (this.masterGain && this.ctx) this.masterGain.gain.setTargetAtTime(v * 0.45, this.ctx.currentTime, 0.02);
       }
-      playNote(midi, duration = 0.9, delay = 0, velocity = 0.8) {
+      playNote(midi, duration = 0.9, delay = 0, velocity = 0.8, timbre = 'epiano') {
         this.ensureContext();
         const now = this.ctx.currentTime + delay;
         const freq = midiToFreq(midi);
         const voiceGain = this.ctx.createGain();
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(2600, now);
-        filter.frequency.exponentialRampToValueAtTime(850, now + Math.max(0.25, duration || 1));
 
-        const osc1 = this.ctx.createOscillator();
-        const osc2 = this.ctx.createOscillator();
-        const osc2Gain = this.ctx.createGain();
-        osc1.type = 'triangle';
-        osc1.frequency.setValueAtTime(freq, now);
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(freq * 2, now);
-        osc2Gain.gain.setValueAtTime(0.2, now);
-        osc2Gain.gain.exponentialRampToValueAtTime(0.02, now + 0.35);
-
+        const oscs = [];
+        let attack = 0.014;
         const peak = 0.45 * velocity;
-        const sustain = peak * 0.42;
-        voiceGain.gain.setValueAtTime(0.0001, now);
-        voiceGain.gain.linearRampToValueAtTime(peak, now + 0.014);
-        voiceGain.gain.exponentialRampToValueAtTime(Math.max(0.001, sustain), now + 0.18);
+        let sustain = peak * 0.42;
 
-        osc1.connect(filter);
-        osc2.connect(osc2Gain);
-        osc2Gain.connect(filter);
+        if (timbre === 'strings') {
+          attack = 0.08;
+          sustain = peak * 0.72;
+          filter.frequency.setValueAtTime(1850, now);
+          const o1 = this.ctx.createOscillator();
+          const o2 = this.ctx.createOscillator();
+          o1.type = 'sawtooth'; o1.frequency.setValueAtTime(freq, now); o1.detune.setValueAtTime(-7, now);
+          o2.type = 'sawtooth'; o2.frequency.setValueAtTime(freq, now); o2.detune.setValueAtTime(7, now);
+          const g = this.ctx.createGain();
+          g.gain.setValueAtTime(0.45, now);
+          o1.connect(g); o2.connect(g); g.connect(filter);
+          oscs.push(o1, o2);
+        } else if (timbre === 'organ') {
+          attack = 0.02;
+          sustain = peak * 0.65;
+          filter.frequency.setValueAtTime(3200, now);
+          [[1, 0.55], [2, 0.25], [3, 0.14]].forEach(([mult, amp]) => {
+            const o = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            o.type = 'sine';
+            o.frequency.setValueAtTime(freq * mult, now);
+            g.gain.setValueAtTime(amp, now);
+            o.connect(g); g.connect(filter);
+            oscs.push(o);
+          });
+        } else {
+          filter.frequency.setValueAtTime(2600, now);
+          filter.frequency.exponentialRampToValueAtTime(850, now + Math.max(0.25, duration || 1));
+          const osc1 = this.ctx.createOscillator();
+          const osc2 = this.ctx.createOscillator();
+          const osc2Gain = this.ctx.createGain();
+          osc1.type = 'triangle'; osc1.frequency.setValueAtTime(freq, now);
+          osc2.type = 'sine'; osc2.frequency.setValueAtTime(freq * 2, now);
+          osc2Gain.gain.setValueAtTime(0.2, now);
+          osc2Gain.gain.exponentialRampToValueAtTime(0.02, now + 0.35);
+          osc1.connect(filter);
+          osc2.connect(osc2Gain);
+          osc2Gain.connect(filter);
+          oscs.push(osc1, osc2);
+        }
+
+        voiceGain.gain.setValueAtTime(0.0001, now);
+        voiceGain.gain.linearRampToValueAtTime(peak, now + attack);
+        if (timbre === 'organ' || timbre === 'strings') {
+          voiceGain.gain.setValueAtTime(sustain, now + attack + 0.02);
+        } else {
+          voiceGain.gain.exponentialRampToValueAtTime(Math.max(0.001, sustain), now + 0.18);
+        }
+
         filter.connect(voiceGain);
         voiceGain.connect(this.masterGain);
-        osc1.start(now);
-        osc2.start(now);
+        oscs.forEach(o => o.start(now));
 
         if (duration !== null) {
           const stopAt = now + duration;
           voiceGain.gain.setValueAtTime(Math.max(0.001, sustain), stopAt);
-          voiceGain.gain.exponentialRampToValueAtTime(0.0001, stopAt + 0.32);
-          osc1.stop(stopAt + 0.36);
-          osc2.stop(stopAt + 0.36);
+          voiceGain.gain.exponentialRampToValueAtTime(0.0001, stopAt + 0.25);
+          oscs.forEach(o => o.stop(stopAt + 0.28));
           return null;
         }
         return () => {
@@ -1212,8 +1307,7 @@
           voiceGain.gain.cancelScheduledValues(rel);
           voiceGain.gain.setValueAtTime(Math.max(0.001, voiceGain.gain.value), rel);
           voiceGain.gain.exponentialRampToValueAtTime(0.0001, rel + 0.28);
-          osc1.stop(rel + 0.32);
-          osc2.stop(rel + 0.32);
+          oscs.forEach(o => o.stop(rel + 0.32));
         };
       }
       playClick(accent = false) {
@@ -1231,10 +1325,10 @@
         osc.start(now);
         osc.stop(now + 0.06);
       }
-      playChord(notes, duration = 1.0, arpStep = 0) {
+      playChord(notes, duration = 1.0, arpStep = 0, timbre = 'epiano') {
         notes.forEach((m, idx) => {
           const d = idx * arpStep;
-          this.playNote(m, duration, d, 0.78);
+          this.playNote(m, duration, d, 0.78, timbre);
           setTimeout(() => pianoUI.flashHighlight(m, (duration + 0.15) * 1000), d * 1000);
         });
       }
@@ -1514,6 +1608,7 @@
     function syncPianoMode() {
       const isTrainer = document.getElementById('sec-trainer').classList.contains('active');
       const isBasics = document.getElementById('sec-basics').classList.contains('active');
+      const isEar = document.getElementById('sec-ear').classList.contains('active');
       const isHarmonize = document.getElementById('sec-harmonize').classList.contains('active');
       const isFormulas = document.getElementById('sec-formulas').classList.contains('active');
       const isSandbox = document.getElementById('sec-sandbox').classList.contains('active');
@@ -1524,6 +1619,10 @@
       } else if (isBasics) {
         document.getElementById('pianoModeBadge').textContent = 'Режим ответа (нажмите услышанную или показанную ноту)';
         pianoUI.onNoteSelect = handleBasicsPianoInput;
+        pianoUI.setAccidentalMode('sharp');
+      } else if (isEar && document.getElementById('eFilterSelect').value === 'mel_dict') {
+        document.getElementById('pianoModeBadge').textContent = 'Мелодический диктант (нажмите услышанную ноту на клавиатуре)';
+        pianoUI.onNoteSelect = handleEarMelNoteInput;
         pianoUI.setAccidentalMode('sharp');
       } else if (isHarmonize) {
         const kbdActive = (typeof hState !== 'undefined' && hState.kbdStepIdx >= 0);
@@ -1554,7 +1653,7 @@
         syncPianoMode();
         if (document.body.classList.contains('is-mobile')) {
           if (tab === 'harmonize' || tab === 'formulas') setPianoCollapsed(true);
-          else if (tab === 'trainer' || tab === 'basics') setPianoCollapsed(false);
+          else if (tab === 'trainer' || tab === 'basics' || (tab === 'ear' && document.getElementById('eFilterSelect').value === 'mel_dict')) setPianoCollapsed(false);
         }
       });
     });
@@ -2100,9 +2199,21 @@
     ========================================================= */
     const eState = { q: null, answered: false, streak: 0, ok: 0, total: 0 };
 
-    function playEarQuestion(q) {
+    function playEarQuestion(q, slow = false) {
       if (!q) return;
-      if (q.mode === 'degrees' && q.cadence) {
+      if (q.mode === 'harm_dict') {
+        q.tonicChord.forEach(m => audio.playNote(m, 0.7, 0, 0.72));
+        const stepSec = slow ? 1.45 : 0.95;
+        q.chordSeq.forEach((ch, idx) => {
+          ch.notes.forEach(m => audio.playNote(m, slow ? 1.25 : 0.8, 1.05 + idx * stepSec, 0.78));
+        });
+      } else if (q.mode === 'mel_dict') {
+        q.tonicChord.forEach(m => audio.playNote(m, 0.65, 0, 0.7));
+        audio.playNote(q.melody[0], 0.65, 0.85, 0.85);
+        q.melody.forEach((m, idx) => {
+          audio.playNote(m, 0.48, 1.85 + idx * 0.56, 0.85);
+        });
+      } else if (q.mode === 'degrees' && q.cadence) {
         q.cadence.forEach((ch, idx) => {
           ch.forEach(m => audio.playNote(m, 0.52, idx * 0.62, 0.68));
         });
@@ -2115,13 +2226,158 @@
       }
     }
 
+    const HARM_DICT_FUNCS = ['T', 'T6', 'S', 'S6', 'K64', 'D', 'D7', 'D43', 'VI'];
+    const HARM_DICT_PROGS = [
+      ['T', 'S', 'D', 'T'],
+      ['T', 'VI', 'S', 'D7'],
+      ['T', 'T6', 'S', 'K64'],
+      ['T', 'D43', 'T6', 'D'],
+      ['T', 'S6', 'D', 'T'],
+      ['T', 'D7', 'VI', 'S'],
+      ['T', 'S', 'K64', 'D7']
+    ];
+
+    function renderHarmDictUI(results = null) {
+      const slotsEl = document.getElementById('eHarmSlots');
+      slotsEl.innerHTML = '';
+      const userSeq = eState.q ? eState.q.userSeq : [];
+      for (let i = 0; i < 4; i++) {
+        const s = document.createElement('div');
+        const val = userSeq[i] || '';
+        let cls = 'dict-slot' + (val ? ' filled' : '');
+        if (results) cls += results[i] ? ' correct' : ' wrong';
+        s.className = cls;
+        s.textContent = val || `${i + 1}`;
+        s.addEventListener('click', () => {
+          if (eState.answered || !eState.q) return;
+          eState.q.userSeq[i] = '';
+          renderHarmDictUI();
+        });
+        slotsEl.appendChild(s);
+      }
+      const pal = document.getElementById('eHarmPalette');
+      pal.innerHTML = '';
+      HARM_DICT_FUNCS.forEach(fn => {
+        const b = document.createElement('button');
+        b.className = 'btn btn-sm';
+        b.textContent = fn;
+        b.addEventListener('click', () => {
+          if (eState.answered || !eState.q) return;
+          const emptyIdx = eState.q.userSeq.findIndex(x => !x);
+          if (emptyIdx >= 0) {
+            eState.q.userSeq[emptyIdx] = fn;
+            renderHarmDictUI();
+          }
+        });
+        pal.appendChild(b);
+      });
+    }
+
+    function renderMelDictStaff(results = null) {
+      const svg = document.getElementById('eMelStaffSvg');
+      if (!eState.q || eState.q.mode !== 'mel_dict') return;
+      const stepH = 5.5;
+      const trebleBottomY = 92; // E4 (d=30)
+      const lines = [0,1,2,3,4].map(i => trebleBottomY - i * 2 * stepH);
+      let out = '';
+      lines.forEach(y => out += `<line x1="16" y1="${y}" x2="344" y2="${y}" stroke="#384661" stroke-width="1.2"/>`);
+      out += `<text x="20" y="${trebleBottomY - 4}" fill="#94a3b8" font-size="44" font-family="serif">𝄞</text>`;
+
+      const userMel = eState.q.userMelody;
+      const n = eState.q.melody.length;
+      const startX = 82;
+      const gap = Math.min(44, Math.floor(240 / Math.max(1, n)));
+
+      for (let i = 0; i < n; i++) {
+        const cx = startX + i * gap;
+        if (i < userMel.length) {
+          const m = userMel[i];
+          const pc = ((m % 12) + 12) % 12;
+          const oct = Math.floor(m / 12) - 1;
+          const info = PC_SHARP[pc];
+          const d = oct * 7 + info.step;
+          const y = trebleBottomY - (d - 30) * stepH;
+          let color = i === 0 ? '#38bdf8' : '#e2e8f0';
+          if (results) color = results[i] ? '#22c55e' : '#ef4444';
+          if (d <= 28) {
+            for (let ld = 28; ld >= d; ld -= 2) {
+              const ly = trebleBottomY - (ld - 30) * stepH;
+              out += `<line x1="${cx - 10}" y1="${ly}" x2="${cx + 10}" y2="${ly}" stroke="#64748b" stroke-width="1.3"/>`;
+            }
+          }
+          if (info.acc) out += `<text x="${cx - 14}" y="${y + 4}" fill="${color}" font-size="13" font-weight="700">${info.acc}</text>`;
+          out += `<ellipse cx="${cx}" cy="${y}" rx="6.5" ry="4.5" transform="rotate(-16 ${cx} ${y})" fill="${color}"/>`;
+        } else {
+          out += `<circle cx="${cx}" cy="${trebleBottomY - 11}" r="3" fill="#334155"/>`;
+        }
+      }
+      svg.innerHTML = out;
+    }
+
+    function handleEarMelNoteInput(midi) {
+      if (!eState.q || eState.q.mode !== 'mel_dict' || eState.answered) return;
+      if (eState.q.userMelody.length >= eState.q.melody.length) return;
+      eState.q.userMelody.push(midi);
+      renderMelDictStaff();
+    }
+
     function nextEarQuestion() {
       eState.answered = false;
       const mode = document.getElementById('eFilterSelect').value;
       const isIntervalMode = mode === 'intervals_basic' || mode === 'intervals_all';
+      const isHarmDict = mode === 'harm_dict';
+      const isMelDict = mode === 'mel_dict';
+
       document.getElementById('eIntervalDirRow').style.display = isIntervalMode ? 'flex' : 'none';
+      document.getElementById('eMelLenRow').style.display = isMelDict ? 'flex' : 'none';
+      document.getElementById('eAnswersGrid').style.display = (isHarmDict || isMelDict) ? 'none' : 'grid';
+      document.getElementById('eHarmDictBox').style.display = isHarmDict ? 'block' : 'none';
+      document.getElementById('eMelDictBox').style.display = isMelDict ? 'block' : 'none';
+      syncPianoMode();
+
       const fb = document.getElementById('eFeedback');
       fb.textContent = '';
+
+      if (isHarmDict) {
+        const prog = HARM_DICT_PROGS[Math.floor(Math.random() * HARM_DICT_PROGS.length)];
+        const keyObj = { root: 0, mode: 'major', name: 'До мажор' };
+        const tonicChord = [60, 64, 67];
+        const chordSeq = prog.map(cid => {
+          const spec = getChordSpec(cid, keyObj);
+          const bassPc = spec.pcs[spec.bassDeg] !== undefined ? spec.pcs[spec.bassDeg] : spec.pcs[0];
+          const bass = 48 + bassPc;
+          const upper = spec.pcs.map(pc => {
+            let n = 60 + pc;
+            if (n <= bass + 4) n += 12;
+            return n;
+          });
+          return { cid, notes: [bass, ...upper] };
+        });
+        eState.q = { mode: 'harm_dict', prog, tonicChord, chordSeq, userSeq: ['', '', '', ''], notes: tonicChord };
+        document.getElementById('eResolveBtn').style.display = 'none';
+        document.getElementById('ePrompt').textContent = 'Прозвучала настройка (До мажор) и цепочка из 4 аккордов. Соберите её по шагам:';
+        renderHarmDictUI();
+        playEarQuestion(eState.q, false);
+        return;
+      }
+
+      if (isMelDict) {
+        const len = Number(document.getElementById('eMelLenSelect').value) || 4;
+        const scaleMidis = [60, 62, 64, 65, 67, 69, 71, 72]; // C4..C5
+        const melody = [60]; // Reference start note C4
+        let curIdx = 0;
+        for (let i = 1; i < len; i++) {
+          const step = [-2, -1, 1, 2][Math.floor(Math.random() * 4)];
+          curIdx = Math.max(0, Math.min(scaleMidis.length - 1, curIdx + step));
+          melody.push(scaleMidis[curIdx]);
+        }
+        eState.q = { mode: 'mel_dict', tonicChord: [60, 64, 67], melody, userMelody: [melody[0]], notes: melody };
+        document.getElementById('eResolveBtn').style.display = 'none';
+        document.getElementById('ePrompt').textContent = `Прозвучало трезвучие и мелодия из ${len} нот (1-я нота показана). Запишите остальные ноты с пианино:`;
+        renderMelDictStaff();
+        playEarQuestion(eState.q);
+        return;
+      }
 
       let options = [], pick, root, notes, resNotes = null, promptText = 'Какой аккорд / обращение прозвучало?';
       let extra = { mode };
@@ -2239,10 +2495,81 @@
     document.getElementById('eFilterSelect').addEventListener('change', () => {
       const mode = document.getElementById('eFilterSelect').value;
       document.getElementById('eIntervalDirRow').style.display = (mode === 'intervals_basic' || mode === 'intervals_all') ? 'flex' : 'none';
+      document.getElementById('eMelLenRow').style.display = mode === 'mel_dict' ? 'flex' : 'none';
+      if (mode === 'mel_dict' && document.body.classList.contains('is-mobile')) setPianoCollapsed(false);
       nextEarQuestion();
     });
     document.getElementById('eIntervalDir').addEventListener('change', () => {
       if (eState.q && eState.q.isInterval) nextEarQuestion();
+    });
+    document.getElementById('eMelLenSelect').addEventListener('change', () => {
+      if (eState.q && eState.q.mode === 'mel_dict') nextEarQuestion();
+    });
+    document.getElementById('eHarmSlowBtn').addEventListener('click', () => {
+      if (eState.q && eState.q.mode === 'harm_dict') playEarQuestion(eState.q, true);
+    });
+    document.getElementById('eHarmClearBtn').addEventListener('click', () => {
+      if (!eState.q || eState.q.mode !== 'harm_dict' || eState.answered) return;
+      eState.q.userSeq = ['', '', '', ''];
+      renderHarmDictUI();
+    });
+    document.getElementById('eHarmCheckBtn').addEventListener('click', () => {
+      if (!eState.q || eState.q.mode !== 'harm_dict' || eState.answered) return;
+      const fb = document.getElementById('eFeedback');
+      if (eState.q.userSeq.some(x => !x)) {
+        fb.innerHTML = `<span style="color:var(--warn);">Заполните все 4 шага цепочки!</span>`;
+        return;
+      }
+      eState.answered = true;
+      eState.total++;
+      const results = eState.q.prog.map((ans, i) => eState.q.userSeq[i] === ans);
+      const ok = results.every(Boolean);
+      if (ok) {
+        eState.ok++;
+        eState.streak++;
+        fb.innerHTML = `<span style="color:var(--success);">Верно! Цепочка: ${eState.q.prog.join(' – ')}</span>`;
+      } else {
+        eState.streak = 0;
+        fb.innerHTML = `<span style="color:var(--danger);">Есть ошибки. Правильно: ${eState.q.prog.join(' – ')}</span>`;
+      }
+      renderHarmDictUI(results);
+      document.getElementById('eStreakVal').textContent = eState.streak;
+      document.getElementById('eAccVal').textContent = Math.round((eState.ok / eState.total) * 100) + '%';
+    });
+    document.getElementById('eMelBackBtn').addEventListener('click', () => {
+      if (!eState.q || eState.q.mode !== 'mel_dict' || eState.answered) return;
+      if (eState.q.userMelody.length > 1) {
+        eState.q.userMelody.pop();
+        renderMelDictStaff();
+      }
+    });
+    document.getElementById('eMelClearBtn').addEventListener('click', () => {
+      if (!eState.q || eState.q.mode !== 'mel_dict' || eState.answered) return;
+      eState.q.userMelody = [eState.q.melody[0]];
+      renderMelDictStaff();
+    });
+    document.getElementById('eMelCheckBtn').addEventListener('click', () => {
+      if (!eState.q || eState.q.mode !== 'mel_dict' || eState.answered) return;
+      const fb = document.getElementById('eFeedback');
+      if (eState.q.userMelody.length < eState.q.melody.length) {
+        fb.innerHTML = `<span style="color:var(--warn);">Наберите все ${eState.q.melody.length} нот на клавиатуре пианино.</span>`;
+        return;
+      }
+      eState.answered = true;
+      eState.total++;
+      const results = eState.q.melody.map((m, i) => eState.q.userMelody[i] === m);
+      const ok = results.every(Boolean);
+      if (ok) {
+        eState.ok++;
+        eState.streak++;
+        fb.innerHTML = `<span style="color:var(--success);">Верно! Мелодия: ${eState.q.melody.map(midiToRu).join(' – ')}</span>`;
+      } else {
+        eState.streak = 0;
+        fb.innerHTML = `<span style="color:var(--danger);">Есть ошибки. Правильно: ${eState.q.melody.map(midiToRu).join(' – ')}</span>`;
+      }
+      renderMelDictStaff(results);
+      document.getElementById('eStreakVal').textContent = eState.streak;
+      document.getElementById('eAccVal').textContent = Math.round((eState.ok / eState.total) * 100) + '%';
     });
     document.getElementById('eNextBtn').addEventListener('click', nextEarQuestion);
     document.getElementById('eRepeatBtn').addEventListener('click', () => playEarQuestion(eState.q));
@@ -2848,7 +3175,7 @@
       hState.kbdStepIdx = -1;
       hState.kbdBuffer = [];
       syncPianoMode();
-      audio.playChord(step.voices.filter(x => x !== null), 0.78, 0);
+      playHarmonizeStep(step.voices, 0.78);
       onHarmonizeEdited();
     }
 
@@ -2950,8 +3277,7 @@
               ? autoVoiceFromBass(st.bass, st.chordId, st.spacing, hState.key)
               : autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
           }
-          const playable = st.voices.filter(x => x !== null);
-          if (playable.length) audio.playChord(playable, 0.75, 0);
+          playHarmonizeStep(st.voices, 0.75);
           onHarmonizeEdited();
         });
 
@@ -2964,8 +3290,7 @@
               ? autoVoiceFromBass(st.bass, st.chordId, st.spacing, hState.key)
               : autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
           }
-          const playable = st.voices.filter(x => x !== null);
-          if (playable.length) audio.playChord(playable, 0.75, 0);
+          playHarmonizeStep(st.voices, 0.75);
           onHarmonizeEdited();
         });
 
@@ -2987,7 +3312,7 @@
               const nextM = stepObj.voices[vIdx] + dir;
               if (nextM >= 36 && nextM <= 81) stepObj.voices[vIdx] = nextM;
             }
-            audio.playChord(stepObj.voices.filter(x => x !== null), 0.7, 0);
+            playHarmonizeStep(stepObj.voices, 0.7);
             onHarmonizeEdited();
           });
         });
@@ -3135,21 +3460,66 @@
       repEl.innerHTML = reports.map(r => `<div class="report-row ${r.ok ? 'ok' : 'err'}">${r.ok ? '✓' : '✕'} ${r.msg}</div>`).join('');
     }
 
+    const hMixer = {
+      mute: [false, false, false, false],
+      solo: [false, false, false, false],
+      timbre: 'epiano'
+    };
+
+    function getActiveHarmonizeNotes(voices) {
+      const hasSolo = hMixer.solo.some(Boolean);
+      const out = [];
+      for (let i = 0; i < 4; i++) {
+        const m = voices[i];
+        if (m === null || m === undefined) continue;
+        if (hasSolo) {
+          if (hMixer.solo[i] && !hMixer.mute[i]) out.push(m);
+        } else {
+          if (!hMixer.mute[i]) out.push(m);
+        }
+      }
+      return out;
+    }
+
+    function playHarmonizeStep(voices, duration = 0.72) {
+      const notes = getActiveHarmonizeNotes(voices);
+      if (notes.length) audio.playChord(notes, duration, 0, hMixer.timbre);
+    }
+
     function playHarmonizeSequence(givenOnly = false) {
       hState.steps.forEach((st, idx) => {
         setTimeout(() => {
           hState.playingIdx = idx;
           renderHarmonizeUI();
-          const notes = givenOnly
-            ? [hState.taskType === 'bass' ? st.bass : st.soprano]
-            : st.voices.filter(x => x !== null);
-          if (notes.length) audio.playChord(notes, 0.72, 0);
+          if (givenOnly) {
+            const gNote = hState.taskType === 'bass' ? st.bass : st.soprano;
+            audio.playChord([gNote], 0.72, 0, hMixer.timbre);
+          } else {
+            playHarmonizeStep(st.voices, 0.72);
+          }
           if (idx === hState.steps.length - 1) {
             setTimeout(() => { hState.playingIdx = -1; renderHarmonizeUI(); }, 760);
           }
         }, idx * 780);
       });
     }
+
+    document.getElementById('hMixerChannels').addEventListener('click', e => {
+      const btn = e.target.closest('[data-hmx]');
+      if (!btn) return;
+      const [vStr, kind] = btn.dataset.hmx.split(':');
+      const vIdx = Number(vStr);
+      if (kind === 'm') {
+        hMixer.mute[vIdx] = !hMixer.mute[vIdx];
+        btn.classList.toggle('m-on', hMixer.mute[vIdx]);
+      } else {
+        hMixer.solo[vIdx] = !hMixer.solo[vIdx];
+        btn.classList.toggle('s-on', hMixer.solo[vIdx]);
+      }
+    });
+    document.getElementById('hTimbreSelect').addEventListener('change', e => {
+      hMixer.timbre = e.target.value;
+    });
 
     document.querySelectorAll('#hTaskTypeToggle .seg-btn').forEach(btn => {
       btn.addEventListener('click', () => {
