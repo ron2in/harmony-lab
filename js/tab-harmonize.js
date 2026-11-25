@@ -844,18 +844,18 @@ function hasParallelFifthOrOctave(prev, cur) {
   return false;
 }
 
-function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, keyObj, prevChordId = '') {
+function getStepVoiceCandidates(prevVoices, fixedNote, isBassMode, chordId, spacing, keyObj, prevChordId = '') {
   const spec = getChordSpec(chordId, keyObj);
   const bassPc = spec.pcs[spec.bassDeg] !== undefined ? spec.pcs[spec.bassDeg] : spec.pcs[0];
-  const isIncompleteT = (!isBassMode && prevChordId === 'D7' && chordId === 'T');
-  const allowedUpperPcs = isIncompleteT ? [spec.pcs[0], spec.pcs[1]] : spec.pcs;
+  const canIncompleteT = (!isBassMode && chordId === 'T' && (prevChordId === 'D' || prevChordId === 'D7'));
+  const allowedUpperPcs = spec.pcs;
 
   const septPc = (keyObj.root + 5) % 12;
   const leadPc = (keyObj.root + 11) % 12;
   const isPrevDom7 = ['D7', 'D65', 'D43', 'D2'].includes(prevChordId);
   const isDomToTonic = ['D', 'D6', 'D7', 'D65', 'D43', 'D2'].includes(prevChordId) && ['T', 'T6', 'VI'].includes(chordId);
 
-  const collectCandidates = (strictSpacing) => {
+  const collectCandidates = (strictSpacing, allowIncompleteT) => {
     const out = [];
     if (!isBassMode) {
       const s = fixedNote;
@@ -872,7 +872,9 @@ function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, ke
         altos.push(a);
       }
       for (const a of altos) {
-        for (let t = Math.max(48, a - 12); t <= Math.min(64, a - 1); t++) {
+        const minT = Math.max(48, a - 12);
+        const maxT = allowIncompleteT ? Math.min(64, a) : Math.min(64, a - 1);
+        for (let t = minT; t <= maxT; t++) {
           if (!allowedUpperPcs.includes(t % 12)) continue;
           const gapAT = a - t;
           if (strictSpacing && spacing === 'tight' && gapAT > 6) continue;
@@ -880,6 +882,11 @@ function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, ke
           for (const b of basses) {
             if (t <= b) continue;
             const v = [s, a, t, b];
+            const pcsPresent = new Set(v.map(m => m % 12));
+            if (allowIncompleteT) {
+              // Require tonic & third when omitting fifth after D/D7
+              if (!pcsPresent.has(spec.pcs[0]) || !pcsPresent.has(spec.pcs[1])) continue;
+            }
             if (!hasParallelFifthOrOctave(prevVoices, v)) out.push(v);
           }
         }
@@ -907,8 +914,8 @@ function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, ke
     return out;
   };
 
-  let rawCandidates = collectCandidates(true);
-  if (!rawCandidates.length) rawCandidates = collectCandidates(false);
+  let rawCandidates = collectCandidates(true, canIncompleteT);
+  if (!rawCandidates.length) rawCandidates = collectCandidates(false, canIncompleteT);
 
   const isDomChord = ['D', 'D6', 'D64', 'D7', 'D65', 'D43', 'D2'].includes(chordId);
 
@@ -935,18 +942,12 @@ function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, ke
 
   if (!candidates.length) candidates = rawCandidates;
 
-  if (!candidates.length) {
-    return isBassMode
-      ? autoVoiceFromBass(fixedNote, chordId, spacing, keyObj)
-      : autoVoiceStep(fixedNote, chordId, spacing, keyObj);
-  }
-
   candidates.sort((v1, v2) => {
     const score = (v) => {
       let sc = 0;
       if (prevVoices && !prevVoices.some(x => x === null)) {
-        sc += Math.abs(v[1] - prevVoices[1]) + Math.abs(v[2] - prevVoices[2]);
-        sc += Math.abs(v[0] - prevVoices[0]) * 1.2 + Math.abs(v[3] - prevVoices[3]) * 0.6;
+        sc += Math.abs(v[1] - prevVoices[1]) + Math.abs(v[2] - prevVoices[2]) + Math.abs(v[3] - prevVoices[3]);
+        sc += Math.abs(v[0] - prevVoices[0]) * 1.1;
       } else {
         sc += Math.abs(v[3] - 48) * 0.4;
       }
@@ -960,28 +961,65 @@ function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, ke
     return score(v1) - score(v2);
   });
 
-  return candidates[0];
+  return candidates;
 }
 
 function solveReferenceVoicing(steps, keyObj) {
-  let prevVoices = null;
-  let prevChordId = '';
   const isBassMode = hState.taskType === 'bass';
   const allowed = H_LEVEL_PRESETS[hState.level].allowedChords;
   const invMap = { 'T': 'T6', 'S': 'S6', 'D': 'D6' };
 
+  // Pre-adjust consecutive octave-doubled outer voices to first inversion if allowed
+  let prevSop = null, prevBassPc = null;
   steps.forEach(s => {
-    if (!isBassMode && prevVoices && invMap[s.chordId] && allowed.includes(invMap[s.chordId])) {
-      const spec = getChordSpec(s.chordId, keyObj);
-      const bassPc = spec.pcs[spec.bassDeg] !== undefined ? spec.pcs[spec.bassDeg] : spec.pcs[0];
-      if ((prevVoices[0] % 12) === (prevVoices[3] % 12) && (s.soprano % 12) === bassPc) {
+    const spec = getChordSpec(s.chordId, keyObj);
+    const bassPc = spec.pcs[spec.bassDeg] !== undefined ? spec.pcs[spec.bassDeg] : spec.pcs[0];
+    if (!isBassMode && prevSop !== null && invMap[s.chordId] && allowed.includes(invMap[s.chordId])) {
+      if ((prevSop % 12) === prevBassPc && (s.soprano % 12) === bassPc) {
         s.chordId = invMap[s.chordId];
       }
     }
+    const updSpec = getChordSpec(s.chordId, keyObj);
+    prevSop = s.soprano;
+    prevBassPc = updSpec.pcs[updSpec.bassDeg] !== undefined ? updSpec.pcs[updSpec.bassDeg] : updSpec.pcs[0];
+  });
+
+  const solution = new Array(steps.length);
+  let branchesVisited = 0;
+  const MAX_BRANCHES = 500;
+
+  function dfs(idx, prevVoices, prevChordId) {
+    if (idx === steps.length) return true;
+    if (branchesVisited >= MAX_BRANCHES) return false;
+    branchesVisited++;
+
+    const s = steps[idx];
     const fixedNote = isBassMode ? s.bass : s.soprano;
-    s.voices = solveStepVoices(prevVoices, fixedNote, isBassMode, s.chordId, s.spacing, keyObj, prevChordId);
-    prevVoices = s.voices;
-    prevChordId = s.chordId;
+    const cands = getStepVoiceCandidates(prevVoices, fixedNote, isBassMode, s.chordId, s.spacing, keyObj, prevChordId);
+    const limit = Math.min(cands.length, 10);
+
+    for (let i = 0; i < limit; i++) {
+      solution[idx] = cands[i];
+      if (dfs(idx + 1, cands[i], s.chordId)) return true;
+    }
+    return false;
+  }
+
+  if (dfs(0, null, '')) {
+    steps.forEach((s, idx) => { s.voices = solution[idx]; });
+    return;
+  }
+
+  // Greedy fallback if DFS branch limit reached
+  let prevV = null, prevC = '';
+  steps.forEach(s => {
+    const fixedNote = isBassMode ? s.bass : s.soprano;
+    const cands = getStepVoiceCandidates(prevV, fixedNote, isBassMode, s.chordId, s.spacing, keyObj, prevC);
+    s.voices = cands.length
+      ? cands[0]
+      : (isBassMode ? autoVoiceFromBass(fixedNote, s.chordId, s.spacing, keyObj) : autoVoiceStep(fixedNote, s.chordId, s.spacing, keyObj));
+    prevV = s.voices;
+    prevC = s.chordId;
   });
 }
 
