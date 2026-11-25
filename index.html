@@ -483,6 +483,29 @@
     /* Ear trainer interval direction toggle */
     .ear-dir-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:6px; }
     body.is-mobile #eAnswersGrid.many-cols { grid-template-columns:repeat(2,1fr); }
+
+    /* Segmented toggle (Melody vs Figured Bass) */
+    .seg-toggle { display:inline-flex; gap:3px; background:var(--bg-app); border:1px solid var(--border); padding:3px; border-radius:var(--radius-sm); }
+    .seg-btn { background:transparent; border:none; color:var(--text-muted); padding:6px 11px; border-radius:4px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; transition:0.13s; }
+    .seg-btn.active { background:var(--bg-elevated); color:var(--accent); box-shadow:inset 0 0 0 1px var(--border-light); }
+    .fb-badge { display:inline-block; background:rgba(251,191,36,0.14); color:var(--subdom); border:1px solid rgba(251,191,36,0.35); border-radius:4px; padding:1px 6px; font-family:var(--font-mono); font-size:11px; font-weight:700; }
+
+    /* Circle of Fifths Tab */
+    .circle-layout { display:grid; grid-template-columns:minmax(0, 1.05fr) minmax(0, 1fr); gap:16px; align-items:start; }
+    @media (max-width: 920px) { .circle-layout { grid-template-columns:1fr; } }
+    .circle-svg-wrap { display:flex; justify-content:center; align-items:center; }
+    .circle-svg-wrap svg { width:100%; max-width:440px; height:auto; display:block; }
+    .circle-sector { cursor:pointer; transition:opacity 0.14s, filter 0.14s; }
+    .circle-sector:hover { filter:brightness(1.22); }
+    .related-pills { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 12px; }
+    .related-pill { font-size:11.5px; padding:4px 9px; border-radius:999px; background:var(--bg-app); border:1px solid var(--border); color:var(--text-main); font-weight:600; cursor:pointer; transition:0.13s; }
+    .related-pill:hover { border-color:var(--accent); }
+    .quiz-keys-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; margin-top:10px; }
+    body.is-mobile .quiz-keys-grid { grid-template-columns:repeat(2, 1fr); }
+    .quiz-key-btn { background:var(--bg-app); border:1px solid var(--border); color:var(--text-main); padding:8px 6px; border-radius:var(--radius-sm); font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; text-align:center; transition:0.13s; }
+    .quiz-key-btn:hover { border-color:var(--accent); }
+    .quiz-key-btn.correct { background:rgba(34,197,94,0.18); border-color:var(--success); color:#86efac; }
+    .quiz-key-btn.wrong { background:rgba(239,68,68,0.18); border-color:var(--danger); color:#fca5a5; }
   </style>
 </head>
 <body>
@@ -504,6 +527,7 @@
       <button class="nav-tab" data-tab="formulas">Справочник и конструктор формул</button>
       <button class="nav-tab" data-tab="ear">Слуховой тренажёр</button>
       <button class="nav-tab" data-tab="sandbox">Гармоническая песочница</button>
+      <button class="nav-tab" data-tab="circle">Квинтовый круг</button>
     </nav>
 
     <div class="audio-controls">
@@ -623,6 +647,7 @@
               <option value="sevenths">Только септаккорды (все виды)</option>
               <option value="rare">Редкие / Ув / Ум (Ум53, Ув53, Бм7, Мум7, Ум7, БУв7, МУв7)</option>
               <option value="intervals">Интервалы (от м2 до ч8)</option>
+              <option value="resolutions">Разрешение неустойчивых аккордов (D7, D65, D43, D2, УмVII7)</option>
             </select>
             <select id="mTaskMode" class="daw-select">
               <option value="root">От заданного звука</option>
@@ -856,8 +881,12 @@
             <h1 class="section-title">Тренажёр гармонизации мелодии (Четырёхголосие)</h1>
             <p class="section-desc">Выберите уровень подготовки или настройте параметры вручную. Расставьте функции, расположение и голоса без параллельных квинт/октав.</p>
           </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn btn-primary" id="hGenBtn">↻ Новая мелодия</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <div class="seg-toggle" id="hTaskTypeToggle">
+              <button type="button" class="seg-btn active" data-htype="melody">Мелодия (Сопрано)</button>
+              <button type="button" class="seg-btn" data-htype="bass">Цифрованный бас</button>
+            </div>
+            <button class="btn btn-primary" id="hGenBtn">↻ Новая задача</button>
             <button class="btn" id="hPlayMelodyBtn">▶ Только мелодия</button>
             <button class="btn" id="hPlayAllBtn">▶ Прослушать задачу</button>
             <button class="btn btn-success" id="hCheckBtn">✓ Сдать работу (Проверить)</button>
@@ -941,6 +970,58 @@
             <div class="steps-editor-grid" id="hStepsGrid"></div>
 
             <div class="check-report" id="hCheckReport"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================
+           TAB 6: CIRCLE OF FIFTHS & KEY SIGNATURES
+      =================================================== -->
+      <section id="sec-circle" class="section">
+        <div class="section-header">
+          <div>
+            <h1 class="section-title">Квинтовый круг и тональности</h1>
+            <p class="section-desc">Кликните по любой из 24 тональностей, чтобы увидеть ключевые знаки, 6 родственных тональностей и услышать тоническое трезвучие.</p>
+          </div>
+        </div>
+
+        <div class="circle-layout">
+          <div class="card">
+            <div class="circle-svg-wrap">
+              <svg id="cWheelSvg" viewBox="0 0 420 420" xmlns="http://www.w3.org/2000/svg"></svg>
+            </div>
+            <div class="legend-row" style="justify-content:center; margin-top:8px;">
+              <span><span class="legend-dot" style="background:#38bdf8;"></span>Выбрана</span>
+              <span><span class="legend-dot" style="background:#34d399;"></span>Субдоминанта / Доминанта</span>
+              <span><span class="legend-dot" style="background:#a78bfa;"></span>Параллельная / Родственные</span>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:14px;">
+            <div class="card">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+                <h3 id="cSelTitle" style="font-size:17px; color:var(--accent);">До мажор (C)</h3>
+                <button class="btn btn-sm btn-primary" id="cPlayTonicBtn">♫ Тоническое трезвучие</button>
+              </div>
+              <div id="cSelMeta" style="font-size:12.5px; color:var(--text-muted); margin-top:4px;">0 знаков при ключе · Параллельная: Ля минор (Am)</div>
+              <div style="font-size:11.5px; color:var(--text-dim); text-transform:uppercase; font-weight:700; margin-top:10px;">Родственные тональности (I степень родства):</div>
+              <div class="related-pills" id="cRelatedPills"></div>
+              <div class="staff-box" style="padding:8px;">
+                <svg id="cKeySigSvg" viewBox="0 0 360 120" style="width:100%; max-width:360px; height:auto; display:block;" xmlns="http://www.w3.org/2000/svg"></svg>
+              </div>
+            </div>
+
+            <div class="card">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                <strong style="font-size:14px; color:var(--tonic);">Мини-тренажёр: угадай тональность по знакам</strong>
+                <button class="btn btn-sm btn-primary" id="cQuizNewBtn">↻ Новый вопрос</button>
+              </div>
+              <div class="staff-box" style="padding:8px; margin-bottom:8px;">
+                <svg id="cQuizSvg" viewBox="0 0 360 110" style="width:100%; max-width:360px; height:auto; display:block;" xmlns="http://www.w3.org/2000/svg"></svg>
+              </div>
+              <div id="cQuizFeedback" style="font-size:12.5px; min-height:20px; text-align:center; margin-bottom:4px;"></div>
+              <div class="quiz-keys-grid" id="cQuizGrid"></div>
+            </div>
           </div>
         </div>
       </section>
@@ -1457,7 +1538,9 @@
         pianoUI.clearStatuses();
         if (isFormulas && typeof fState !== 'undefined') pianoUI.setAccidentalMode(getFormulaAccidentalMode());
         else if (isSandbox && typeof sState !== 'undefined') pianoUI.setAccidentalMode(getSandboxAccidentalMode());
-        else pianoUI.setAccidentalMode('sharp');
+        else if (document.getElementById('sec-circle').classList.contains('active') && typeof cState !== 'undefined') {
+          pianoUI.setAccidentalMode(CIRCLE_KEYS[cState.idx].sig < 0 ? 'flat' : 'sharp');
+        } else pianoUI.setAccidentalMode('sharp');
       }
     }
 
@@ -1515,7 +1598,82 @@
 
       const grp = document.getElementById('mFilterGroup').value;
       const mode = document.getElementById('mTaskMode').value;
-      document.getElementById('mTaskMode').disabled = (grp === 'intervals');
+      document.getElementById('mTaskMode').disabled = (grp === 'intervals' || grp === 'resolutions');
+
+      if (grp === 'resolutions') {
+        const keyRoot = Math.floor(Math.random() * 12);
+        const isMinor = Math.random() < 0.45;
+        const flatMajors = [5, 10, 3, 8, 1];
+        const flatMinors = [2, 7, 0, 5, 10];
+        const accMode = (isMinor ? flatMinors.includes(keyRoot) : flatMajors.includes(keyRoot)) ? 'flat' : 'sharp';
+        pianoUI.setAccidentalMode(accMode);
+
+        const T = (60 + keyRoot > 67) ? 48 + keyRoot : 60 + keyRoot;
+        const t3 = isMinor ? 3 : 4;
+        const domRoot = 60 + ((keyRoot + 7) % 12);
+        const viiRoot = 60 + ((keyRoot + 11) % 12);
+        const keyLabel = `${midiToRuNoOct(keyRoot, accMode)} ${isMinor ? 'миноре' : 'мажоре'}`;
+
+        const resSpecs = [
+          {
+            code: 'D7',
+            sourceNotes: buildInversionNotes(domRoot, [0, 4, 7, 10], 0),
+            expectedNotes: [T, T + t3, T + 12],
+            reqBassPc: keyRoot,
+            allowedPcs: [keyRoot, (keyRoot + t3) % 12],
+            ruleText: 'D7 → неполное T53 с утроенным основным тоном (без квинты)'
+          },
+          {
+            code: 'D65',
+            sourceNotes: buildInversionNotes(domRoot, [0, 4, 7, 10], 1),
+            expectedNotes: [T, T + t3, T + 7],
+            reqBassPc: keyRoot,
+            allowedPcs: [keyRoot, (keyRoot + t3) % 12, (keyRoot + 7) % 12],
+            ruleText: 'D65 → полное T53 с удвоенным основным тоном'
+          },
+          {
+            code: 'D43',
+            sourceNotes: buildInversionNotes(domRoot, [0, 4, 7, 10], 2),
+            expectedNotes: [T, T + t3, T + 7],
+            reqBassPc: keyRoot,
+            allowedPcs: [keyRoot, (keyRoot + t3) % 12, (keyRoot + 7) % 12],
+            ruleText: 'D43 → полное T53 с удвоенным основным тоном (поступенный бас II → I)'
+          },
+          {
+            code: 'D2',
+            sourceNotes: buildInversionNotes(domRoot, [0, 4, 7, 10], 3),
+            expectedNotes: buildInversionNotes(T, [0, t3, 7], 1),
+            reqBassPc: (keyRoot + t3) % 12,
+            allowedPcs: [keyRoot, (keyRoot + t3) % 12, (keyRoot + 7) % 12],
+            ruleText: 'D2 → T6 (септима в басу идёт на секунду вниз в терцию тоники)'
+          },
+          {
+            code: 'УмVII7',
+            sourceNotes: buildInversionNotes(viiRoot, [0, 3, 6, 9], 0),
+            expectedNotes: [T, T + t3, T + 7],
+            reqBassPc: keyRoot,
+            allowedPcs: [keyRoot, (keyRoot + t3) % 12, (keyRoot + 7) % 12],
+            ruleText: 'УмVII7 → T53 с удвоенной терцией (без параллельных квинт)'
+          }
+        ];
+
+        const pick = resSpecs[Math.floor(Math.random() * resSpecs.length)];
+        const title = `Разреши ${pick.code} в тональности ${keyLabel}`;
+        const hint = `Исходный аккорд (${pick.sourceNotes.map(m => midiToRu(m, accMode)).join(' – ')}) показан серым. Наберите аккорд разрешения.`;
+
+        mState.task = {
+          isResolution: true,
+          ...pick,
+          chord: { id: 'res_' + pick.code, intervals: [] },
+          rootPc: keyRoot, invIdx: 0, invCode: pick.code,
+          title, hint, accidentalMode: accMode
+        };
+        document.getElementById('mTaskTitle').textContent = title;
+        document.getElementById('mTaskHint').textContent = hint;
+        renderMainUserState();
+        audio.playChord(pick.sourceNotes, 0.95, 0);
+        return;
+      }
 
       if (grp === 'intervals') {
         const ivPool = INTERVALS_DB.filter(iv => iv.semi >= 1 && iv.semi <= 12);
@@ -1620,7 +1778,12 @@
       document.getElementById('mStaffBass').textContent = sorted.length ? `Бас: ${midiToRu(sorted[0])}` : '';
       pianoUI.clearStatuses();
       pianoUI.setKeyClass(sorted, 'selected-note');
-      renderGrandStaff(document.getElementById('mStaffSvg'), sorted.map(m => ({ midi: m, color: '#38bdf8' })), (m) => {
+      const staffNotes = [];
+      if (mState.task && mState.task.isResolution && mState.task.sourceNotes) {
+        mState.task.sourceNotes.forEach(m => staffNotes.push({ midi: m, color: '#64748b' }));
+      }
+      sorted.forEach(m => staffNotes.push({ midi: m, color: '#38bdf8' }));
+      renderGrandStaff(document.getElementById('mStaffSvg'), staffNotes, (m) => {
         audio.playNote(m, 0.55, 0, 0.8);
         toggleTrainerNote(m);
       });
@@ -1635,6 +1798,57 @@
       if (!usr.length) {
         fb.className = 'feedback-banner info';
         fb.textContent = 'Наберите ноты на клавиатуре или нотном стане.';
+        return;
+      }
+
+      if (t.isResolution) {
+        const usrSet = new Set(usr.map(m => m % 12));
+        const allowedSet = new Set(t.allowedPcs);
+        const bassOk = (usr[0] % 12) === t.reqBassPc;
+        const allAllowed = usr.every(m => allowedSet.has(m % 12));
+        const allRequiredPresent = t.allowedPcs.every(pc => usrSet.has(pc));
+        const ok = bassOk && allAllowed && allRequiredPresent;
+
+        if (!mState.checked) {
+          mState.checked = true;
+          if (ok) mStats.streak++;
+          else mStats.streak = 0;
+          saveMStats();
+          renderMStats();
+        }
+        pianoUI.clearStatuses();
+        const staffObjs = t.sourceNotes.map(m => ({ midi: m, color: '#64748b' }));
+        const greenMidis = [], redMidis = [], yellowMidis = [];
+        usr.forEach(m => {
+          if (allowedSet.has(m % 12)) {
+            greenMidis.push(m);
+            staffObjs.push({ midi: m, color: '#22c55e' });
+          } else {
+            redMidis.push(m);
+            staffObjs.push({ midi: m, color: '#ef4444' });
+          }
+        });
+        t.expectedNotes.forEach(em => {
+          if (!usrSet.has(em % 12)) {
+            yellowMidis.push(em);
+            staffObjs.push({ midi: em, color: '#eab308' });
+          }
+        });
+        pianoUI.setKeyClass(greenMidis, 'check-ok');
+        pianoUI.setKeyClass(redMidis, 'check-err');
+        pianoUI.setKeyClass(yellowMidis, 'check-warn');
+        renderGrandStaff(document.getElementById('mStaffSvg'), staffObjs);
+
+        audio.playChord(t.sourceNotes, 0.65, 0);
+        setTimeout(() => audio.playChord(usr, 1.0, 0), 700);
+
+        if (ok) {
+          fb.className = 'feedback-banner ok';
+          fb.innerHTML = `<strong>Верно!</strong> Правило выполнено: ${t.ruleText}.`;
+        } else {
+          fb.className = 'feedback-banner err';
+          fb.innerHTML = `Ошибка разрешения. ${t.ruleText}. Эталон: <strong class="mono">${t.expectedNotes.map(midiToRu).join(' – ')}</strong>.`;
+        }
         return;
       }
 
@@ -2285,12 +2499,51 @@
 
     const hState = {
       level: 1,
+      taskType: 'melody', // 'melody' | 'bass'
       key: { root: 0, mode: 'major', name: 'До мажор' },
-      steps: [], // [{ bar, beat, soprano, chordId, spacing, voices:[S,A,T,B], isSusp, hint }]
+      steps: [], // [{ bar, beat, soprano, bass, figuredBass, chordId, spacing, voices:[S,A,T,B], isSusp, hint }]
       playingIdx: -1,
       kbdStepIdx: -1,
       kbdBuffer: []
     };
+
+    function getFiguredBassLabel(chordId, keyObj) {
+      const figMap = {
+        'T': '5/3', 'S': '5/3', 'D': '5/3', 'VI': '5/3', 'III': '5/3',
+        'T6': '6', 'S6': '6', 'D6': '6', 'N6': '6',
+        'T64': '6/4', 'S64': '6/4', 'D64': '6/4', 'K64': '6/4',
+        'D7': '7', 'II7': '7', 'VII7': '7', 'DD7': '7', 'D->S': '7', 'D->VI': '7',
+        'D65': '6/5', 'II65': '6/5',
+        'D43': '4/3', 'D2': '2'
+      };
+      let fig = figMap[chordId] || '5/3';
+      if (keyObj.mode === 'minor' && ['D', 'D6', 'D64'].includes(chordId)) {
+        fig += ' (♯)';
+      }
+      return fig;
+    }
+
+    function autoVoiceFromBass(bassMidi, chordId, spacing, keyObj) {
+      const spec = getChordSpec(chordId, keyObj);
+      const tones = [];
+      for (let m = Math.max(48, bassMidi + 3); m <= 79; m++) {
+        if (spec.pcs.includes(m % 12)) tones.push(m);
+      }
+      if (tones.length < 3) return [72, 67, 64, bassMidi];
+      let tenor, alto, soprano;
+      if (spacing === 'tight') {
+        tenor = tones.find(m => m >= 53) || tones[0];
+        const tIdx = tones.indexOf(tenor);
+        alto = tones[Math.min(tones.length - 1, tIdx + 1)];
+        soprano = tones[Math.min(tones.length - 1, tIdx + 2)];
+      } else {
+        tenor = tones.find(m => m >= 52) || tones[0];
+        const tIdx = tones.indexOf(tenor);
+        alto = tones[Math.min(tones.length - 1, tIdx + 2)];
+        soprano = tones[Math.min(tones.length - 1, tIdx + 4)];
+      }
+      return [soprano, alto, tenor, bassMidi];
+    }
 
     function getChordSpec(chordId, keyObj) {
       const def = H_CHORD_CATALOG[chordId] || H_CHORD_CATALOG['T'];
@@ -2426,29 +2679,66 @@
       hState.kbdStepIdx = -1;
       hState.kbdBuffer = [];
 
-      hState.steps = plan.map((item) => {
+      hState.steps = plan.map((item, idx) => {
         const semi = item.deg === 'sharp4' ? 6 : sc[item.deg];
         let sop = base + semi;
         if (sop > 79) sop -= 12;
         if (sop < 62) sop += 12;
 
         const refChord = (H_CHORD_CATALOG[item.hint] && allowed.includes(item.hint)) ? item.hint : 'T';
+        const refVoices = autoVoiceStep(sop, refChord, initSpacing, key);
+        const bassMidi = refVoices[3];
+        const figuredBass = getFiguredBassLabel(refChord, key);
+
+        if (hState.taskType === 'bass') {
+          if (workMode === 'draft') {
+            return {
+              bar: Math.floor(idx / 2) + 1,
+              beat: (idx % 2) === 0 ? 'сильная' : 'слабая',
+              soprano: sop,
+              bass: bassMidi,
+              figuredBass,
+              chordId: refChord,
+              spacing: initSpacing,
+              voices: autoVoiceFromBass(bassMidi, refChord, initSpacing, key),
+              isSusp: item.susp,
+              hint: refChord
+            };
+          }
+          return {
+            bar: Math.floor(idx / 2) + 1,
+            beat: (idx % 2) === 0 ? 'сильная' : 'слабая',
+            soprano: sop,
+            bass: bassMidi,
+            figuredBass,
+            chordId: '',
+            spacing: initSpacing,
+            voices: [null, null, null, bassMidi],
+            isSusp: item.susp,
+            hint: refChord
+          };
+        }
+
         if (workMode === 'draft') {
           return {
-            bar: Math.floor(plan.indexOf(item) / 2) + 1,
-            beat: (plan.indexOf(item) % 2) === 0 ? 'сильная' : 'слабая',
+            bar: Math.floor(idx / 2) + 1,
+            beat: (idx % 2) === 0 ? 'сильная' : 'слабая',
             soprano: sop,
+            bass: bassMidi,
+            figuredBass,
             chordId: refChord,
             spacing: initSpacing,
-            voices: autoVoiceStep(sop, refChord, initSpacing, key),
+            voices: refVoices,
             isSusp: item.susp,
             hint: refChord
           };
         }
         return {
-          bar: 1,
-          beat: 'сильная',
+          bar: Math.floor(idx / 2) + 1,
+          beat: (idx % 2) === 0 ? 'сильная' : 'слабая',
           soprano: sop,
+          bass: bassMidi,
+          figuredBass,
           chordId: '',
           spacing: initSpacing,
           voices: [sop, null, null, null],
@@ -2456,12 +2746,10 @@
           hint: refChord
         };
       });
-      hState.steps.forEach((st, idx) => {
-        st.bar = Math.floor(idx / 2) + 1;
-        st.beat = (idx % 2) === 0 ? 'сильная' : 'слабая';
-      });
 
+      document.getElementById('hPlayMelodyBtn').textContent = hState.taskType === 'bass' ? '▶ Только бас' : '▶ Только мелодия';
       document.getElementById('hTaskMeta').innerHTML = `
+        <strong>Режим:</strong> ${hState.taskType === 'bass' ? 'Цифрованный бас' : 'Мелодия (Сопрано)'}<br/>
         <strong>Тональность:</strong> ${key.name} · <strong>Тактов:</strong> ${totalBars}<br/>
         <strong>Уровень:</strong> ${preset.name}<br/>
         <span style="color:var(--text-dim);">Доступно аккордов: ${preset.allowedChords.length}</span>
@@ -2472,7 +2760,9 @@
       if (workMode === 'draft' && document.getElementById('hStrictness').value === 'soft') {
         checkHarmonization();
       } else if (workMode === 'scratch') {
-        document.getElementById('hCheckReport').innerHTML = `<div class="report-row info">Режим «С нуля»: выберите функции аккордов и задайте Альт, Тенор и Бас кнопками ▲/▼ или «🎹 С клавиш».</div>`;
+        document.getElementById('hCheckReport').innerHTML = hState.taskType === 'bass'
+          ? `<div class="report-row info">Режим «Цифрованный бас»: Бас зафиксирован, достройте верхние голоса (T, A, S) по цифровке под нотами.</div>`
+          : `<div class="report-row info">Режим «С нуля»: выберите функции аккордов и задайте Альт, Тенор и Бас кнопками ▲/▼ или «🎹 С клавиш».</div>`;
       } else if (workMode === 'semi') {
         document.getElementById('hCheckReport').innerHTML = `<div class="report-row info">Режим «Выбор функций»: выберите аккорд в каждом шаге — голоса построятся автоматически.</div>`;
       } else {
@@ -2521,13 +2811,14 @@
           const d = oct * 7 + info.step;
           const isTreble = vIdx < 2;
           const y = isTreble ? trebleBottomY - (d - 30) * stepH : bassTopY + (26 - d) * stepH;
-          const color = isErr ? '#f87171' : (vIdx === 0 ? '#38bdf8' : '#e2e8f0');
+          const color = isErr ? '#f87171' : ((hState.taskType === 'bass' ? vIdx === 3 : vIdx === 0) ? '#38bdf8' : '#e2e8f0');
 
           if (info.acc) out += `<text x="${cx - 14}" y="${y + 4}" fill="${color}" font-size="12" font-weight="700">${info.acc}</text>`;
           out += `<ellipse cx="${cx}" cy="${y}" rx="5.5" ry="3.9" transform="rotate(-16 ${cx} ${y})" fill="${color}"/>`;
         });
 
-        out += `<text x="${cx}" y="206" text-anchor="middle" fill="${isErr ? '#f87171' : '#94a3b8'}" font-size="10" font-family="monospace">${st.chordId || '—'}</text>`;
+        const bottomLabel = hState.taskType === 'bass' ? (st.figuredBass || '5/3') : (st.chordId || '—');
+        out += `<text x="${cx}" y="206" text-anchor="middle" fill="${isErr ? '#f87171' : (hState.taskType === 'bass' ? '#fbbf24' : '#94a3b8')}" font-size="10" font-family="monospace">${bottomLabel}</text>`;
       });
 
       svg.innerHTML = out;
@@ -2541,11 +2832,19 @@
         renderHarmonizeUI();
         return;
       }
-      const sorted = [...hState.kbdBuffer].sort((a, b) => a - b); // [Bass, Tenor, Alto]
+      const sorted = [...hState.kbdBuffer].sort((a, b) => a - b);
       const step = hState.steps[hState.kbdStepIdx];
-      step.voices[3] = sorted[0];
-      step.voices[2] = sorted[1];
-      step.voices[1] = sorted[2];
+      if (hState.taskType === 'bass') {
+        // [Tenor, Alto, Soprano]
+        step.voices[2] = sorted[0];
+        step.voices[1] = sorted[1];
+        step.voices[0] = sorted[2];
+      } else {
+        // [Bass, Tenor, Alto]
+        step.voices[3] = sorted[0];
+        step.voices[2] = sorted[1];
+        step.voices[1] = sorted[2];
+      }
       hState.kbdStepIdx = -1;
       hState.kbdBuffer = [];
       syncPianoMode();
@@ -2574,11 +2873,63 @@
             ).join('');
 
         const fmtV = m => (m === null || m === undefined) ? '—' : midiToRu(m);
+        const isBassMode = hState.taskType === 'bass';
+
+        const voicesHtml = isBassMode
+          ? `
+            <div class="voice-ctrl">
+              <span>S: <strong class="mono">${fmtV(st.voices[0])}</strong></span>
+              <div class="voice-btns">
+                <button class="v-btn" data-vshift="${idx}:0:1">▲</button>
+                <button class="v-btn" data-vshift="${idx}:0:-1">▼</button>
+              </div>
+            </div>
+            <div class="voice-ctrl">
+              <span>A: <strong class="mono">${fmtV(st.voices[1])}</strong></span>
+              <div class="voice-btns">
+                <button class="v-btn" data-vshift="${idx}:1:1">▲</button>
+                <button class="v-btn" data-vshift="${idx}:1:-1">▼</button>
+              </div>
+            </div>
+            <div class="voice-ctrl">
+              <span>T: <strong class="mono">${fmtV(st.voices[2])}</strong></span>
+              <div class="voice-btns">
+                <button class="v-btn" data-vshift="${idx}:2:1">▲</button>
+                <button class="v-btn" data-vshift="${idx}:2:-1">▼</button>
+              </div>
+            </div>
+          `
+          : `
+            <div class="voice-ctrl">
+              <span>A: <strong class="mono">${fmtV(st.voices[1])}</strong></span>
+              <div class="voice-btns">
+                <button class="v-btn" data-vshift="${idx}:1:1">▲</button>
+                <button class="v-btn" data-vshift="${idx}:1:-1">▼</button>
+              </div>
+            </div>
+            <div class="voice-ctrl">
+              <span>T: <strong class="mono">${fmtV(st.voices[2])}</strong></span>
+              <div class="voice-btns">
+                <button class="v-btn" data-vshift="${idx}:2:1">▲</button>
+                <button class="v-btn" data-vshift="${idx}:2:-1">▼</button>
+              </div>
+            </div>
+            <div class="voice-ctrl">
+              <span>B: <strong class="mono">${fmtV(st.voices[3])}</strong></span>
+              <div class="voice-btns">
+                <button class="v-btn" data-vshift="${idx}:3:1">▲</button>
+                <button class="v-btn" data-vshift="${idx}:3:-1">▼</button>
+              </div>
+            </div>
+          `;
 
         card.innerHTML = `
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; gap:4px;">
             <span class="mono" style="color:var(--text-dim);">Т.${st.bar} (${st.beat})</span>
-            <strong class="mono" style="color:var(--accent);">S: ${midiToRu(st.soprano)}</strong>
+            ${isBassMode
+              ? `<span style="display:flex; align-items:center; gap:4px;"><strong class="mono" style="color:var(--accent);">B: ${midiToRu(st.bass)}</strong><span class="fb-badge">${st.figuredBass}</span></span>`
+              : `<strong class="mono" style="color:var(--accent);">S: ${midiToRu(st.soprano)}</strong>`
+            }
           </div>
           ${st.isSusp ? `<span class="badge badge-S" style="align-self:flex-start;">Задержание</span>` : ''}
           <select class="daw-select" data-hchord="${idx}" style="width:100%; padding:3px 6px;">${chordOpts}</select>
@@ -2586,27 +2937,7 @@
             <option value="tight" ${st.spacing==='tight'?'selected':''}>Тесное</option>
             <option value="wide" ${st.spacing==='wide'?'selected':''}>Широкое</option>
           </select>
-          <div class="voice-ctrl">
-            <span>A: <strong class="mono">${fmtV(st.voices[1])}</strong></span>
-            <div class="voice-btns">
-              <button class="v-btn" data-vshift="${idx}:1:1">▲</button>
-              <button class="v-btn" data-vshift="${idx}:1:-1">▼</button>
-            </div>
-          </div>
-          <div class="voice-ctrl">
-            <span>T: <strong class="mono">${fmtV(st.voices[2])}</strong></span>
-            <div class="voice-btns">
-              <button class="v-btn" data-vshift="${idx}:2:1">▲</button>
-              <button class="v-btn" data-vshift="${idx}:2:-1">▼</button>
-            </div>
-          </div>
-          <div class="voice-ctrl">
-            <span>B: <strong class="mono">${fmtV(st.voices[3])}</strong></span>
-            <div class="voice-btns">
-              <button class="v-btn" data-vshift="${idx}:3:1">▲</button>
-              <button class="v-btn" data-vshift="${idx}:3:-1">▼</button>
-            </div>
-          </div>
+          ${voicesHtml}
           <button class="btn btn-sm ${isKbdActive ? 'btn-primary' : 'btn-ghost'}" data-hkbd="${idx}" style="width:100%; margin-top:2px; font-size:11px;">
             ${isKbdActive ? `🎹 Ноты (${hState.kbdBuffer.length}/3)` : '🎹 С клавиш'}
           </button>
@@ -2615,7 +2946,9 @@
         card.querySelector(`[data-hchord="${idx}"]`).addEventListener('change', e => {
           st.chordId = e.target.value;
           if (st.chordId && (workMode === 'semi' || workMode === 'draft')) {
-            st.voices = autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
+            st.voices = isBassMode
+              ? autoVoiceFromBass(st.bass, st.chordId, st.spacing, hState.key)
+              : autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
           }
           const playable = st.voices.filter(x => x !== null);
           if (playable.length) audio.playChord(playable, 0.75, 0);
@@ -2627,7 +2960,9 @@
         spSel.addEventListener('change', e => {
           st.spacing = e.target.value;
           if (st.chordId && (workMode === 'semi' || workMode === 'draft')) {
-            st.voices = autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
+            st.voices = isBassMode
+              ? autoVoiceFromBass(st.bass, st.chordId, st.spacing, hState.key)
+              : autoVoiceStep(st.soprano, st.chordId, st.spacing, hState.key);
           }
           const playable = st.voices.filter(x => x !== null);
           if (playable.length) audio.playChord(playable, 0.75, 0);
@@ -2638,7 +2973,9 @@
           vb.addEventListener('click', () => {
             const [sIdx, vIdx, dir] = vb.dataset.vshift.split(':').map(Number);
             const stepObj = hState.steps[sIdx];
-            const defaults = { 1: Math.min(65, stepObj.soprano - 3), 2: 60, 3: 48 };
+            const defaults = isBassMode
+              ? { 0: 72, 1: 65, 2: Math.max(52, stepObj.bass + 7) }
+              : { 1: Math.min(65, stepObj.soprano - 3), 2: 60, 3: 48 };
             if (stepObj.voices[vIdx] === null) {
               stepObj.voices[vIdx] = defaults[vIdx];
             } else if (stepObj.chordId) {
@@ -2687,12 +3024,13 @@
       const reports = [];
       const errSteps = new Set();
 
-      // 1. Voice leading: completeness, parallel 5ths/8ves, crossings, melody fit
+      // 1. Voice leading: completeness, parallel 5ths/8ves, crossings, melody/figured-bass fit
       const incompleteBars = [];
+      const isBassMode = hState.taskType === 'bass';
       for (let i = 0; i < steps.length; i++) {
         const cur = steps[i];
         const v = cur.voices; // [S, A, T, B]
-        const missingVoices = (v[1] === null || v[2] === null || v[3] === null);
+        const missingVoices = (v[0] === null || v[1] === null || v[2] === null || v[3] === null);
 
         if (!cur.chordId || missingVoices) {
           errSteps.add(i);
@@ -2702,7 +3040,17 @@
 
         const spec = getChordSpec(cur.chordId, hState.key);
 
-        if (!cur.isSusp && !spec.pcs.includes(v[0] % 12)) {
+        if (isBassMode) {
+          const refSpec = getChordSpec(cur.hint, hState.key);
+          const badTopVoices = [0, 1, 2].filter(vi => !refSpec.pcs.includes(v[vi] % 12));
+          if (badTopVoices.length) {
+            errSteps.add(i);
+            reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): верхние голоса не соответствуют цифровке ${cur.figuredBass} от баса ${midiToRuNoOct(v[3])}.` });
+          }
+          if (i > 0 && steps[i - 1].voices[0] !== null && Math.abs(v[0] - steps[i - 1].voices[0]) > 7) {
+            reports.push({ ok: false, msg: `Такт ${cur.bar}: слишком большой скачок в Сопрано (> квинты), старайтесь вести мелодию плавнее.` });
+          }
+        } else if (!cur.isSusp && !spec.pcs.includes(v[0] % 12)) {
           errSteps.add(i);
           reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): нота мелодии ${midiToRuNoOct(v[0])} не входит в аккорд ${cur.chordId}.` });
         }
@@ -2714,7 +3062,7 @@
 
         if (i > 0) {
           const prev = steps[i - 1].voices;
-          if (prev[1] !== null && prev[2] !== null && prev[3] !== null) {
+          if (prev[0] !== null && prev[1] !== null && prev[2] !== null && prev[3] !== null) {
             const pairs = [[0,1,'S–A'],[0,2,'S–T'],[0,3,'S–B'],[1,2,'A–T'],[1,3,'A–B'],[2,3,'T–B']];
             pairs.forEach(([a, b, label]) => {
               const iv1 = (prev[a] - prev[b]) % 12;
@@ -2735,7 +3083,7 @@
       }
 
       if (incompleteBars.length) {
-        reports.unshift({ ok: false, msg: `Не выбрана функция или не достроены голоса A, T, B в шагах: ${incompleteBars.join(', ')}.` });
+        reports.unshift({ ok: false, msg: `Не выбрана функция или не достроены голоса в шагах: ${incompleteBars.join(', ')}.` });
       }
 
       // 2. Spacing rule check
@@ -2787,12 +3135,14 @@
       repEl.innerHTML = reports.map(r => `<div class="report-row ${r.ok ? 'ok' : 'err'}">${r.ok ? '✓' : '✕'} ${r.msg}</div>`).join('');
     }
 
-    function playHarmonizeSequence(melodyOnly = false) {
+    function playHarmonizeSequence(givenOnly = false) {
       hState.steps.forEach((st, idx) => {
         setTimeout(() => {
           hState.playingIdx = idx;
           renderHarmonizeUI();
-          const notes = melodyOnly ? [st.soprano] : st.voices.filter(x => x !== null);
+          const notes = givenOnly
+            ? [hState.taskType === 'bass' ? st.bass : st.soprano]
+            : st.voices.filter(x => x !== null);
           if (notes.length) audio.playChord(notes, 0.72, 0);
           if (idx === hState.steps.length - 1) {
             setTimeout(() => { hState.playingIdx = -1; renderHarmonizeUI(); }, 760);
@@ -2801,6 +3151,14 @@
       });
     }
 
+    document.querySelectorAll('#hTaskTypeToggle .seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#hTaskTypeToggle .seg-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        hState.taskType = btn.dataset.htype;
+        generateHarmonizeTask();
+      });
+    });
     document.querySelectorAll('#hLevelGrid .level-card').forEach(btn => {
       btn.addEventListener('click', () => applyLevelPreset(Number(btn.dataset.lvl)));
     });
@@ -2817,7 +3175,9 @@
       hState.steps.forEach((s, idx) => {
         s.chordId = H_CHORD_CATALOG[s.hint] ? s.hint : 'T';
         s.spacing = (rule === 'change' && idx >= Math.floor(hState.steps.length / 2)) ? 'wide' : spacing;
-        s.voices = autoVoiceStep(s.soprano, s.chordId, s.spacing, hState.key);
+        s.voices = hState.taskType === 'bass'
+          ? autoVoiceFromBass(s.bass, s.chordId, s.spacing, hState.key)
+          : autoVoiceStep(s.soprano, s.chordId, s.spacing, hState.key);
       });
       syncPianoMode();
       checkHarmonization();
@@ -2828,7 +3188,11 @@
       if (rule === 'tight' || rule === 'wide') {
         hState.steps.forEach(s => {
           s.spacing = rule;
-          if (s.chordId && s.voices[1] !== null) s.voices = autoVoiceStep(s.soprano, s.chordId, rule, hState.key);
+          if (s.chordId && s.voices[1] !== null) {
+            s.voices = hState.taskType === 'bass'
+              ? autoVoiceFromBass(s.bass, s.chordId, rule, hState.key)
+              : autoVoiceStep(s.soprano, s.chordId, rule, hState.key);
+          }
         });
       }
       onHarmonizeEdited();
@@ -3104,6 +3468,217 @@
     renderBasicsNoteButtons();
     renderBasicsEarButtons();
     generateBasicsReadQuestion();
+
+    /* =========================================================
+       9.7. TAB 6: CIRCLE OF FIFTHS & KEY SIGNATURES
+    ========================================================= */
+    const CIRCLE_KEYS = [
+      { maj:'C',  majRu:'До мажор',      min:'Am',  minRu:'Ля минор',     sig:0,  majPc:0,  minPc:9 },
+      { maj:'G',  majRu:'Соль мажор',    min:'Em',  minRu:'Ми минор',     sig:1,  majPc:7,  minPc:4 },
+      { maj:'D',  majRu:'Ре мажор',      min:'Bm',  minRu:'Си минор',     sig:2,  majPc:2,  minPc:11 },
+      { maj:'A',  majRu:'Ля мажор',      min:'F♯m', minRu:'Фа♯ минор',    sig:3,  majPc:9,  minPc:6 },
+      { maj:'E',  majRu:'Ми мажор',      min:'C♯m', minRu:'До♯ минор',    sig:4,  majPc:4,  minPc:1 },
+      { maj:'B',  majRu:'Си мажор',      min:'G♯m', minRu:'Соль♯ минор',  sig:5,  majPc:11, minPc:8 },
+      { maj:'F♯', majRu:'Фа♯ мажор',     min:'D♯m', minRu:'Ре♯ минор',    sig:6,  majPc:6,  minPc:3 },
+      { maj:'D♭', majRu:'Ре♭ мажор',     min:'B♭m', minRu:'Си♭ минор',    sig:-5, majPc:1,  minPc:10 },
+      { maj:'A♭', majRu:'Ля♭ мажор',     min:'Fm',  minRu:'Фа минор',     sig:-4, majPc:8,  minPc:5 },
+      { maj:'E♭', majRu:'Ми♭ мажор',     min:'Cm',  minRu:'До минор',     sig:-3, majPc:3,  minPc:0 },
+      { maj:'B♭', majRu:'Си♭ мажор',     min:'Gm',  minRu:'Соль минор',   sig:-2, majPc:10, minPc:7 },
+      { maj:'F',  majRu:'Фа мажор',      min:'Dm',  minRu:'Ре минор',     sig:-1, majPc:5,  minPc:2 }
+    ];
+
+    const cState = { idx: 0, isMinor: false, quizSig: 0, quizAnswered: false };
+
+    function polarPoint(cx, cy, r, deg) {
+      const rad = (deg - 90) * Math.PI / 180;
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+    }
+
+    function ringSectorPath(cx, cy, rIn, rOut, a1, a2) {
+      const p1 = polarPoint(cx, cy, rOut, a1);
+      const p2 = polarPoint(cx, cy, rOut, a2);
+      const p3 = polarPoint(cx, cy, rIn, a2);
+      const p4 = polarPoint(cx, cy, rIn, a1);
+      return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${rOut} ${rOut} 0 0 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)} L ${p3.x.toFixed(2)} ${p3.y.toFixed(2)} A ${rIn} ${rIn} 0 0 0 ${p4.x.toFixed(2)} ${p4.y.toFixed(2)} Z`;
+    }
+
+    function renderKeySigStaff(svgEl, sigCount, tonicNotes = null, mode = 'sharp') {
+      const stepH = 5.5;
+      const trebleBottomY = 80; // E4 (d=30)
+      const lines = [0,1,2,3,4].map(i => trebleBottomY - i * 2 * stepH);
+      let svg = '';
+      lines.forEach(y => svg += `<line x1="20" y1="${y}" x2="340" y2="${y}" stroke="#384661" stroke-width="1.3"/>`);
+      svg += `<text x="26" y="${trebleBottomY - 4}" fill="#94a3b8" font-size="44" font-family="serif">𝄞</text>`;
+
+      const sharpSteps = [38, 35, 39, 36, 33, 37, 34]; // F5 C5 G5 D5 A4 E5 B4
+      const flatSteps  = [34, 37, 33, 36, 32, 35, 31]; // B4 E5 A4 D5 G4 C5 F4
+      const count = Math.abs(sigCount);
+      const isSharp = sigCount >= 0;
+      const arr = isSharp ? sharpSteps : flatSteps;
+      const sym = isSharp ? '♯' : '♭';
+
+      for (let i = 0; i < count; i++) {
+        const d = arr[i];
+        const y = trebleBottomY - (d - 30) * stepH;
+        const x = 74 + i * 16;
+        svg += `<text x="${x}" y="${y + 5}" fill="#fbbf24" font-size="18" font-weight="700">${sym}</text>`;
+      }
+
+      if (tonicNotes) {
+        const tbl = mode === 'flat' ? PC_FLAT : PC_SHARP;
+        tonicNotes.forEach((m, idx) => {
+          const pc = ((m % 12) + 12) % 12;
+          const oct = Math.floor(m / 12) - 1;
+          const d = oct * 7 + tbl[pc].step;
+          const y = trebleBottomY - (d - 30) * stepH;
+          const cx = 240 + idx * 20;
+          if (d <= 28) {
+            for (let ld = 28; ld >= d; ld -= 2) {
+              const ly = trebleBottomY - (ld - 30) * stepH;
+              svg += `<line x1="${cx - 10}" y1="${ly}" x2="${cx + 10}" y2="${ly}" stroke="#64748b" stroke-width="1.3"/>`;
+            }
+          }
+          svg += `<ellipse cx="${cx}" cy="${y}" rx="6.5" ry="4.5" transform="rotate(-18 ${cx} ${y})" fill="#38bdf8"/>`;
+        });
+      }
+      svgEl.innerHTML = svg;
+    }
+
+    function getCircleTonicNotes() {
+      const k = CIRCLE_KEYS[cState.idx];
+      const pc = cState.isMinor ? k.minPc : k.majPc;
+      const iv = cState.isMinor ? [0, 3, 7] : [0, 4, 7];
+      return buildInversionNotes(60 + pc, iv, 0);
+    }
+
+    function renderCircleWheel() {
+      const svg = document.getElementById('cWheelSvg');
+      const cx = 210, cy = 210;
+      const leftIdx = (cState.idx + 11) % 12;
+      const rightIdx = (cState.idx + 1) % 12;
+      let out = '';
+
+      CIRCLE_KEYS.forEach((k, i) => {
+        const a1 = i * 30 - 15;
+        const a2 = i * 30 + 15;
+        const mid = i * 30;
+
+        const isSelMaj = (i === cState.idx && !cState.isMinor);
+        const isSelMin = (i === cState.idx && cState.isMinor);
+        const isNeighbor = (i === leftIdx || i === rightIdx);
+        const isRel = (i === cState.idx || isNeighbor);
+
+        const majFill = isSelMaj ? '#0284c7' : (isNeighbor && !cState.isMinor ? '#065f46' : (isRel ? '#312e81' : '#171e2b'));
+        const minFill = isSelMin ? '#0284c7' : (isNeighbor && cState.isMinor ? '#065f46' : (isRel ? '#312e81' : '#111621'));
+
+        out += `<path class="circle-sector" data-cidx="${i}" data-cmin="0" d="${ringSectorPath(cx, cy, 122, 192, a1, a2)}" fill="${majFill}" stroke="#273144" stroke-width="1.5"/>`;
+        out += `<path class="circle-sector" data-cidx="${i}" data-cmin="1" d="${ringSectorPath(cx, cy, 62, 120, a1, a2)}" fill="${minFill}" stroke="#273144" stroke-width="1.5"/>`;
+
+        const pMaj = polarPoint(cx, cy, 158, mid);
+        const pMin = polarPoint(cx, cy, 92, mid);
+        out += `<text x="${pMaj.x.toFixed(1)}" y="${(pMaj.y + 5).toFixed(1)}" text-anchor="middle" fill="#edf2f7" font-size="14" font-weight="700" pointer-events="none">${k.maj}</text>`;
+        out += `<text x="${pMin.x.toFixed(1)}" y="${(pMin.y + 4).toFixed(1)}" text-anchor="middle" fill="#cbd5e1" font-size="11.5" font-weight="600" pointer-events="none">${k.min}</text>`;
+      });
+
+      const cur = CIRCLE_KEYS[cState.idx];
+      const sigTxt = cur.sig === 0 ? '0 знаков' : (cur.sig > 0 ? `${cur.sig}♯` : `${Math.abs(cur.sig)}♭`);
+      out += `<circle cx="${cx}" cy="${cy}" r="58" fill="#090c12" stroke="#384661" stroke-width="1.5"/>`;
+      out += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="#38bdf8" font-size="18" font-weight="800">${cState.isMinor ? cur.min : cur.maj}</text>`;
+      out += `<text x="${cx}" y="${cy + 16}" text-anchor="middle" fill="#94a3b8" font-size="12">${sigTxt}</text>`;
+
+      svg.innerHTML = out;
+      svg.querySelectorAll('[data-cidx]').forEach(el => {
+        el.addEventListener('click', () => {
+          selectCircleKey(Number(el.dataset.cidx), el.dataset.cmin === '1', true);
+        });
+      });
+    }
+
+    function selectCircleKey(idx, isMinor, playSound = false) {
+      cState.idx = idx;
+      cState.isMinor = isMinor;
+      const cur = CIRCLE_KEYS[idx];
+      const left = CIRCLE_KEYS[(idx + 11) % 12];
+      const right = CIRCLE_KEYS[(idx + 1) % 12];
+      const accMode = cur.sig < 0 ? 'flat' : 'sharp';
+      pianoUI.setAccidentalMode(accMode);
+
+      document.getElementById('cSelTitle').textContent = isMinor ? `${cur.minRu} (${cur.min})` : `${cur.majRu} (${cur.maj})`;
+      const sigLabel = cur.sig === 0 ? '0 знаков при ключе' : (cur.sig > 0 ? `${cur.sig} диез(а/ов)` : `${Math.abs(cur.sig)} бемоль(я/ей)`);
+      const parLabel = isMinor ? `${cur.majRu} (${cur.maj})` : `${cur.minRu} (${cur.min})`;
+      document.getElementById('cSelMeta').textContent = `${sigLabel} · Параллельная: ${parLabel}`;
+
+      const related = [
+        { label: `Паралл.: ${isMinor ? cur.maj : cur.min}`, idx, min: !isMinor },
+        { label: `S: ${isMinor ? left.min : left.maj}`, idx: (idx + 11) % 12, min: isMinor },
+        { label: `S паралл.: ${isMinor ? left.maj : left.min}`, idx: (idx + 11) % 12, min: !isMinor },
+        { label: `D: ${isMinor ? right.min : right.maj}`, idx: (idx + 1) % 12, min: isMinor },
+        { label: `D паралл.: ${isMinor ? right.maj : right.min}`, idx: (idx + 1) % 12, min: !isMinor },
+        { label: `Одноим.: ${isMinor ? cur.maj : cur.min.replace('m', '') + 'm'}`, idx, min: isMinor }
+      ];
+      const pills = document.getElementById('cRelatedPills');
+      pills.innerHTML = '';
+      related.forEach((r, rIdx) => {
+        const b = document.createElement('button');
+        b.className = 'related-pill';
+        b.textContent = r.label;
+        if (rIdx < 5) b.addEventListener('click', () => selectCircleKey(r.idx, r.min, true));
+        pills.appendChild(b);
+      });
+
+      const tonicNotes = getCircleTonicNotes();
+      renderKeySigStaff(document.getElementById('cKeySigSvg'), cur.sig, tonicNotes, accMode);
+      renderCircleWheel();
+      if (playSound) audio.playChord(tonicNotes, 0.95, 0);
+    }
+
+    const QUIZ_KEY_SIGS = [
+      ...CIRCLE_KEYS.map(k => ({ sig: k.sig, label: `${k.maj} / ${k.min}` })),
+      { sig: 7,  label: 'C♯ / A♯m' },
+      { sig: -7, label: 'C♭ / A♭m' },
+      { sig: -6, label: 'G♭ / E♭m' }
+    ];
+
+    function nextCircleQuiz() {
+      cState.quizAnswered = false;
+      const sigs = [-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7];
+      const pickSig = sigs[Math.floor(Math.random() * sigs.length)];
+      cState.quizSig = pickSig;
+      renderKeySigStaff(document.getElementById('cQuizSvg'), pickSig, null, pickSig < 0 ? 'flat' : 'sharp');
+      document.getElementById('cQuizFeedback').textContent = '';
+
+      const grid = document.getElementById('cQuizGrid');
+      grid.innerHTML = '';
+      const sortedOpts = [...QUIZ_KEY_SIGS].sort((a, b) => a.sig - b.sig);
+      sortedOpts.forEach(o => {
+        const b = document.createElement('button');
+        b.className = 'quiz-key-btn';
+        b.dataset.sig = o.sig;
+        b.textContent = o.label;
+        b.addEventListener('click', () => {
+          if (cState.quizAnswered) return;
+          cState.quizAnswered = true;
+          const fb = document.getElementById('cQuizFeedback');
+          const rightMatch = (o.sig === cState.quizSig) || (Math.abs(o.sig) === 6 && Math.abs(cState.quizSig) === 6 && o.sig === cState.quizSig);
+          if (rightMatch) {
+            b.classList.add('correct');
+            fb.innerHTML = `<span style="color:var(--success); font-weight:700;">Верно! ${o.label}</span>`;
+          } else {
+            b.classList.add('wrong');
+            const corr = grid.querySelector(`[data-sig="${cState.quizSig}"]`);
+            if (corr) corr.classList.add('correct');
+            const corrObj = QUIZ_KEY_SIGS.find(x => x.sig === cState.quizSig);
+            fb.innerHTML = `<span style="color:var(--danger); font-weight:700;">Неверно. Ответ: ${corrObj ? corrObj.label : ''}</span>`;
+          }
+        });
+        grid.appendChild(b);
+      });
+    }
+
+    document.getElementById('cPlayTonicBtn').addEventListener('click', () => audio.playChord(getCircleTonicNotes(), 1.0, 0));
+    document.getElementById('cQuizNewBtn').addEventListener('click', nextCircleQuiz);
+    selectCircleKey(0, false, false);
+    nextCircleQuiz();
 
     /* =========================================================
        10. DEVICE DETECTION (PC vs MOBILE PHONE)
