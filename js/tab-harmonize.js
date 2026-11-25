@@ -311,6 +311,17 @@ function generateHarmonizeTask() {
     };
   });
 
+  if (workMode === 'draft') {
+    let prevV = null, prevC = '';
+    hState.steps.forEach((s, idx) => {
+      s.spacing = (spacingRule === 'change' && idx >= Math.floor(hState.steps.length / 2)) ? 'wide' : initSpacing;
+      const fixedNote = hState.taskType === 'bass' ? s.bass : s.soprano;
+      s.voices = solveStepVoices(prevV, fixedNote, hState.taskType === 'bass', s.chordId, s.spacing, key, prevC);
+      prevV = s.voices;
+      prevC = s.chordId;
+    });
+  }
+
   document.getElementById('hPlayMelodyBtn').textContent = hState.taskType === 'bass' ? '▶ Только бас' : '▶ Только мелодия';
   document.getElementById('hTaskMeta').innerHTML = `
     <strong>Режим:</strong> ${hState.taskType === 'bass' ? 'Цифрованный бас' : 'Мелодия (Сопрано)'}<br/>
@@ -354,6 +365,11 @@ function renderHarmonizeScore(errStepSet = new Set()) {
   out += `<text x="28" y="${trebleBottomY - 3}" fill="#94a3b8" font-size="38" font-family="serif">𝄞</text>`;
   out += `<text x="28" y="${bassTopY + 30}" fill="#94a3b8" font-size="30" font-family="serif">𝄢</text>`;
 
+  const flatMajors = [5, 10, 3, 8, 1];
+  const flatMinors = [2, 7, 0, 5, 10];
+  const isFlatKey = hState.key.mode === 'minor' ? flatMinors.includes(hState.key.root) : flatMajors.includes(hState.key.root);
+  const tbl = isFlatKey ? PC_FLAT : PC_SHARP;
+
   hState.steps.forEach((st, idx) => {
     const cx = startX + idx * colW + colW / 2;
     if (idx > 0 && idx % 2 === 0) {
@@ -366,16 +382,36 @@ function renderHarmonizeScore(errStepSet = new Set()) {
       out += `<rect x="${cx - 14}" y="26" width="28" height="162" rx="4" fill="rgba(56,189,248,0.14)"/>`;
     }
 
-    // Draw voices that are set (S, A on treble; T, B on bass)
+    // Draw voices that are set (S, A on treble; T, B on bass) with ledger lines
     st.voices.forEach((midi, vIdx) => {
       if (midi === null || midi === undefined) return;
       const pc = ((midi % 12) + 12) % 12;
       const oct = Math.floor(midi / 12) - 1;
-      const info = PC_SHARP[pc];
+      const info = tbl[pc];
       const d = oct * 7 + info.step;
       const isTreble = vIdx < 2;
       const y = isTreble ? trebleBottomY - (d - 30) * stepH : bassTopY + (26 - d) * stepH;
       const color = isErr ? '#f87171' : ((hState.taskType === 'bass' ? vIdx === 3 : vIdx === 0) ? '#38bdf8' : '#e2e8f0');
+
+      if (isTreble) {
+        for (let ld = 28; ld >= d; ld -= 2) {
+          const ly = trebleBottomY - (ld - 30) * stepH;
+          out += `<line x1="${cx - 10}" y1="${ly}" x2="${cx + 10}" y2="${ly}" stroke="#64748b" stroke-width="1.2"/>`;
+        }
+        for (let ld = 40; ld <= d; ld += 2) {
+          const ly = trebleBottomY - (ld - 30) * stepH;
+          out += `<line x1="${cx - 10}" y1="${ly}" x2="${cx + 10}" y2="${ly}" stroke="#64748b" stroke-width="1.2"/>`;
+        }
+      } else {
+        for (let ld = 28; ld <= d; ld += 2) {
+          const ly = bassTopY + (26 - ld) * stepH;
+          out += `<line x1="${cx - 10}" y1="${ly}" x2="${cx + 10}" y2="${ly}" stroke="#64748b" stroke-width="1.2"/>`;
+        }
+        for (let ld = 16; ld >= d; ld -= 2) {
+          const ly = bassTopY + (26 - ld) * stepH;
+          out += `<line x1="${cx - 10}" y1="${ly}" x2="${cx + 10}" y2="${ly}" stroke="#64748b" stroke-width="1.2"/>`;
+        }
+      }
 
       if (info.acc) out += `<text x="${cx - 14}" y="${y + 4}" fill="${color}" font-size="12" font-weight="700">${info.acc}</text>`;
       out += `<ellipse cx="${cx}" cy="${y}" rx="5.5" ry="3.9" transform="rotate(-16 ${cx} ${y})" fill="${color}"/>`;
@@ -601,6 +637,7 @@ function checkHarmonization() {
     }
 
     const spec = getChordSpec(cur.chordId, hState.key);
+    const isIncompleteTAfterD7 = (i > 0 && steps[i - 1].chordId === 'D7' && cur.chordId === 'T');
 
     if (isBassMode) {
       const refSpec = getChordSpec(cur.hint, hState.key);
@@ -615,6 +652,15 @@ function checkHarmonization() {
     } else if (!cur.isSusp && !spec.pcs.includes(v[0] % 12)) {
       errSteps.add(i);
       reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): нота мелодии ${midiToRuNoOct(v[0])} не входит в аккорд ${cur.chordId}.` });
+    } else if (!cur.isSusp) {
+      const allowedPcs = isIncompleteTAfterD7 ? [spec.pcs[0], spec.pcs[1]] : spec.pcs;
+      const badLower = [1, 2, 3].filter(vi => !spec.pcs.includes(v[vi] % 12));
+      if (badLower.length) {
+        errSteps.add(i);
+        reports.push({ ok: false, msg: `Такт ${cur.bar} (${cur.beat}): в голосах A/T/B есть неаккордовый звук для ${cur.chordId}.` });
+      } else if (!isIncompleteTAfterD7 && !allowedPcs.includes(v[1] % 12)) {
+        // full chord tones valid
+      }
     }
 
     if (v[0] < v[1] || v[1] < v[2] || v[2] < v[3]) {
@@ -774,22 +820,124 @@ document.getElementById('hGenBtn').addEventListener('click', generateHarmonizeTa
 document.getElementById('hCheckBtn').addEventListener('click', checkHarmonization);
 document.getElementById('hPlayMelodyBtn').addEventListener('click', () => playHarmonizeSequence(true));
 document.getElementById('hPlayAllBtn').addEventListener('click', () => playHarmonizeSequence(false));
-document.getElementById('hShowRefBtn').addEventListener('click', () => {
+function hasParallelFifthOrOctave(prev, cur) {
+  if (!prev || prev.some(x => x === null || x === undefined)) return false;
+  const pairs = [[0,1],[0,2],[0,3],[1,2],[1,3],[2,3]];
+  for (const [a, b] of pairs) {
+    if (prev[a] !== cur[a] && prev[b] !== cur[b]) {
+      const iv1 = ((prev[a] - prev[b]) % 12 + 12) % 12;
+      const iv2 = ((cur[a] - cur[b]) % 12 + 12) % 12;
+      if ((iv1 === 7 && iv2 === 7) || (iv1 === 0 && iv2 === 0)) return true;
+    }
+  }
+  return false;
+}
+
+function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, keyObj, prevChordId = '') {
+  const spec = getChordSpec(chordId, keyObj);
+  const bassPc = spec.pcs[spec.bassDeg] !== undefined ? spec.pcs[spec.bassDeg] : spec.pcs[0];
+  const isIncompleteT = (!isBassMode && prevChordId === 'D7' && chordId === 'T');
+  const allowedUpperPcs = isIncompleteT ? [spec.pcs[0], spec.pcs[1]] : spec.pcs;
+
+  const candidates = [];
+  if (!isBassMode) {
+    const s = fixedNote;
+    const basses = [];
+    for (let b = 40; b <= Math.min(57, s - 6); b++) {
+      if (b % 12 === bassPc) basses.push(b);
+    }
+    const altos = [];
+    for (let a = Math.max(50, s - 12); a < s; a++) {
+      if (!allowedUpperPcs.includes(a % 12)) continue;
+      const gapSA = s - a;
+      if (spacing === 'tight' && gapSA > 6) continue;
+      if (spacing === 'wide' && (gapSA < 5 || gapSA > 12)) continue;
+      altos.push(a);
+    }
+    for (const a of altos) {
+      for (let t = Math.max(45, a - 12); t < a; t++) {
+        if (!allowedUpperPcs.includes(t % 12)) continue;
+        const gapAT = a - t;
+        if (spacing === 'tight' && gapAT > 6) continue;
+        if (spacing === 'wide' && (gapAT < 5 || gapAT > 12)) continue;
+        for (const b of basses) {
+          if (t < b) continue;
+          const v = [s, a, t, b];
+          if (!hasParallelFifthOrOctave(prevVoices, v)) candidates.push(v);
+        }
+      }
+    }
+  } else {
+    const b = fixedNote;
+    for (let t = Math.max(b, 50); t <= 65; t++) {
+      if (!spec.pcs.includes(t % 12)) continue;
+      for (let a = t + 1; a <= Math.min(72, t + 12); a++) {
+        if (!spec.pcs.includes(a % 12)) continue;
+        const gapAT = a - t;
+        if (spacing === 'tight' && gapAT > 6) continue;
+        if (spacing === 'wide' && (gapAT < 5 || gapAT > 12)) continue;
+        for (let s = a + 1; s <= Math.min(79, a + 12); s++) {
+          if (!spec.pcs.includes(s % 12)) continue;
+          const gapSA = s - a;
+          if (spacing === 'tight' && gapSA > 6) continue;
+          if (spacing === 'wide' && (gapSA < 5 || gapSA > 12)) continue;
+          const v = [s, a, t, b];
+          if (!hasParallelFifthOrOctave(prevVoices, v)) candidates.push(v);
+        }
+      }
+    }
+  }
+
+  if (!candidates.length) {
+    return isBassMode
+      ? autoVoiceFromBass(fixedNote, chordId, spacing, keyObj)
+      : autoVoiceStep(fixedNote, chordId, spacing, keyObj);
+  }
+
+  candidates.sort((v1, v2) => {
+    const score = (v) => {
+      let sc = 0;
+      if (prevVoices && !prevVoices.some(x => x === null)) {
+        sc += Math.abs(v[0] - prevVoices[0]) * 1.4;
+        sc += Math.abs(v[1] - prevVoices[1]);
+        sc += Math.abs(v[2] - prevVoices[2]);
+        sc += Math.abs(v[3] - prevVoices[3]) * 0.7;
+      } else {
+        sc += Math.abs(v[3] - 48) * 0.4;
+      }
+      const uniquePcs = new Set(v.map(m => m % 12)).size;
+      sc -= uniquePcs * 4;
+      return sc;
+    };
+    return score(v1) - score(v2);
+  });
+
+  return candidates[0];
+}
+
+function showReferenceSolution() {
   const rule = document.getElementById('hSpacingRule').value;
-  const spacing = rule === 'wide' ? 'wide' : 'tight';
+  const baseSpacing = rule === 'wide' ? 'wide' : 'tight';
   hState.kbdStepIdx = -1;
   hState.kbdBuffer = [];
+
+  let prevVoices = null;
+  let prevChordId = '';
   hState.steps.forEach((s, idx) => {
     s.chordId = H_CHORD_CATALOG[s.hint] ? s.hint : 'T';
-    s.spacing = (rule === 'change' && idx >= Math.floor(hState.steps.length / 2)) ? 'wide' : spacing;
-    s.voices = hState.taskType === 'bass'
-      ? autoVoiceFromBass(s.bass, s.chordId, s.spacing, hState.key)
-      : autoVoiceStep(s.soprano, s.chordId, s.spacing, hState.key);
+    s.spacing = (rule === 'change' && idx >= Math.floor(hState.steps.length / 2)) ? 'wide' : baseSpacing;
+    const fixedNote = hState.taskType === 'bass' ? s.bass : s.soprano;
+    s.voices = solveStepVoices(prevVoices, fixedNote, hState.taskType === 'bass', s.chordId, s.spacing, hState.key, prevChordId);
+    prevVoices = s.voices;
+    prevChordId = s.chordId;
   });
+
   syncPianoMode();
   checkHarmonization();
   playHarmonizeSequence(false);
-});
+}
+
+document.getElementById('hShowRefBtn').addEventListener('click', showReferenceSolution);
 document.getElementById('hSpacingRule').addEventListener('change', () => {
   const rule = document.getElementById('hSpacingRule').value;
   if (rule === 'tight' || rule === 'wide') {
