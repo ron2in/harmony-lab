@@ -191,48 +191,61 @@ function generateHarmonizeTask() {
   const domCadChord = allowed.includes('D7') ? 'D7' : 'D';
 
   // Build adaptive melody (8 steps = 4 bars x 2 chords, or 16 steps for 8 bars)
+  // Avoid consecutive root-in-soprano on root-position chords to prevent parallel S-B octaves
   const totalBars = preset.bars;
-  // Template degree sequence (scale index 0..7) guaranteed to satisfy selected conditions
-  let plan = [
-    { deg: 0, hint: 'T', susp: false },
-    { deg: 3, hint: 'S', susp: false },
-    { deg: 4, hint: 'D', susp: false },
-    { deg: 0, hint: 'T', susp: false },
-    { deg: needK64 ? 4 : 3, hint: needK64 ? 'K64' : 'S', susp: false },
-    { deg: domCadChord === 'D7' ? 6 : 4, hint: domCadChord, susp: false },
-    { deg: 0, hint: 'T', susp: false },
-    { deg: 0, hint: 'T', susp: false }
-  ];
+  const melVariant = Math.random() < 0.5 ? 'A' : 'B';
+  let plan = melVariant === 'A'
+    ? [
+        { deg: 2, hint: 'T', susp: false }, // III (E)
+        { deg: 3, hint: 'S', susp: false }, // IV (F)
+        { deg: 1, hint: 'D', susp: false }, // II (D)
+        { deg: 2, hint: 'T', susp: false }, // III (E)
+        { deg: needK64 ? 4 : 5, hint: needK64 ? 'K64' : 'S', susp: false }, // V or VI
+        { deg: domCadChord === 'D7' ? 6 : 1, hint: domCadChord, susp: false }, // VII or II
+        { deg: 0, hint: 'T', susp: false }, // I (C)
+        { deg: 0, hint: 'T', susp: false }
+      ]
+    : [
+        { deg: 4, hint: 'T', susp: false }, // V (G)
+        { deg: 5, hint: 'S', susp: false }, // VI (A)
+        { deg: 4, hint: 'D', susp: false }, // V (G)
+        { deg: 2, hint: 'T', susp: false }, // III (E)
+        { deg: needK64 ? 4 : 3, hint: needK64 ? 'K64' : 'S', susp: false }, // V or IV
+        { deg: domCadChord === 'D7' ? 3 : 1, hint: domCadChord, susp: false }, // IV or II
+        { deg: 2, hint: 'T', susp: false }, // III (E)
+        { deg: 0, hint: 'T', susp: false }  // I (C)
+      ];
 
   if (needPass64) {
-    // Bar 1-2: I - II - III (for T - D43 - T6)
-    plan[0] = { deg: 0, hint: 'T', susp: false };
-    plan[1] = { deg: 1, hint: 'D43', susp: false };
+    // Bar 1-2: contrary motion T(V) -> D43(IV) -> T6(III)
+    plan[0] = { deg: 4, hint: 'T', susp: false };
+    plan[1] = { deg: 3, hint: 'D43', susp: false };
     plan[2] = { deg: 2, hint: 'T6', susp: false };
   }
   if (needD7Inv && !needPass64) {
-    plan[1] = { deg: 3, hint: 'D2', susp: false };
-    plan[2] = { deg: 2, hint: 'T6', susp: false };
+    plan[0] = { deg: 4, hint: 'T', susp: false };
+    plan[1] = { deg: 4, hint: 'D2', susp: false };
+    plan[2] = { deg: 0, hint: 'T6', susp: false };
   }
   if (totalBars === 8) {
     const extra = [
-      { deg: 0, hint: 'T', susp: false },
-      { deg: needDD ? 'sharp4' : 3, hint: needDD ? 'DD7' : 'S', susp: false },
+      { deg: 2, hint: 'T', susp: false },
+      { deg: needDD ? 'sharp4' : 5, hint: needDD ? 'DD7' : 'S', susp: false },
       { deg: 4, hint: 'D', susp: false },
-      { deg: needDec ? 5 : 0, hint: needDec ? 'VI' : 'T', susp: false },
+      { deg: needDec ? 2 : 2, hint: needDec ? 'VI' : 'T', susp: false },
       { deg: 3, hint: 'S6', susp: false },
-      { deg: 4, hint: 'D', susp: needSusp },
-      { deg: 0, hint: 'T', susp: false },
+      { deg: 1, hint: 'D', susp: needSusp },
+      { deg: 2, hint: 'T', susp: false },
       { deg: 0, hint: 'T', susp: false }
     ];
     plan = [...plan.slice(0, 4), ...extra, ...plan.slice(4)];
     if (needDec && plan.length >= 12) {
       plan[6] = { deg: 6, hint: domCadChord, susp: false };
-      plan[7] = { deg: 5, hint: 'VI', susp: false };
+      plan[7] = { deg: 0, hint: 'VI', susp: false };
     }
   } else if (needDec) {
     plan[2] = { deg: 6, hint: domCadChord, susp: false };
-    plan[3] = { deg: 5, hint: 'VI', susp: false };
+    plan[3] = { deg: 0, hint: 'VI', susp: false };
   } else if (needDD) {
     plan[3] = { deg: 'sharp4', hint: 'DD7', susp: false };
   }
@@ -842,56 +855,65 @@ function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, ke
   const isPrevDom7 = ['D7', 'D65', 'D43', 'D2'].includes(prevChordId);
   const isDomToTonic = ['D', 'D6', 'D7', 'D65', 'D43', 'D2'].includes(prevChordId) && ['T', 'T6', 'VI'].includes(chordId);
 
-  const rawCandidates = [];
-  if (!isBassMode) {
-    const s = fixedNote;
-    const basses = [];
-    for (let b = 40; b <= Math.min(57, s - 6); b++) {
-      if (b % 12 === bassPc) basses.push(b);
-    }
-    const altos = [];
-    for (let a = Math.max(53, s - 12); a <= Math.min(72, s - 1); a++) {
-      if (!allowedUpperPcs.includes(a % 12)) continue;
-      const gapSA = s - a;
-      if (spacing === 'tight' && gapSA > 6) continue;
-      if (spacing === 'wide' && (gapSA < 5 || gapSA > 12)) continue;
-      altos.push(a);
-    }
-    for (const a of altos) {
-      for (let t = Math.max(48, a - 12); t <= Math.min(64, a - 1); t++) {
-        if (!allowedUpperPcs.includes(t % 12)) continue;
-        const gapAT = a - t;
-        if (spacing === 'tight' && gapAT > 6) continue;
-        if (spacing === 'wide' && (gapAT < 5 || gapAT > 12)) continue;
-        for (const b of basses) {
-          if (t <= b) continue;
-          const v = [s, a, t, b];
-          if (!hasParallelFifthOrOctave(prevVoices, v)) rawCandidates.push(v);
+  const collectCandidates = (strictSpacing) => {
+    const out = [];
+    if (!isBassMode) {
+      const s = fixedNote;
+      const basses = [];
+      for (let b = 40; b <= Math.min(57, s - 6); b++) {
+        if (b % 12 === bassPc) basses.push(b);
+      }
+      const altos = [];
+      for (let a = Math.max(53, s - 12); a <= Math.min(72, s - 1); a++) {
+        if (!allowedUpperPcs.includes(a % 12)) continue;
+        const gapSA = s - a;
+        if (strictSpacing && spacing === 'tight' && gapSA > 6) continue;
+        if (strictSpacing && spacing === 'wide' && (gapSA < 5 || gapSA > 12)) continue;
+        altos.push(a);
+      }
+      for (const a of altos) {
+        for (let t = Math.max(48, a - 12); t <= Math.min(64, a - 1); t++) {
+          if (!allowedUpperPcs.includes(t % 12)) continue;
+          const gapAT = a - t;
+          if (strictSpacing && spacing === 'tight' && gapAT > 6) continue;
+          if (strictSpacing && spacing === 'wide' && (gapAT < 5 || gapAT > 12)) continue;
+          for (const b of basses) {
+            if (t <= b) continue;
+            const v = [s, a, t, b];
+            if (!hasParallelFifthOrOctave(prevVoices, v)) out.push(v);
+          }
+        }
+      }
+    } else {
+      const b = fixedNote;
+      for (let t = Math.max(b + 1, 48); t <= 64; t++) {
+        if (!spec.pcs.includes(t % 12)) continue;
+        for (let a = t + 1; a <= Math.min(72, t + 12); a++) {
+          if (!spec.pcs.includes(a % 12)) continue;
+          const gapAT = a - t;
+          if (strictSpacing && spacing === 'tight' && gapAT > 6) continue;
+          if (strictSpacing && spacing === 'wide' && (gapAT < 5 || gapAT > 12)) continue;
+          for (let s = a + 1; s <= Math.min(79, a + 12); s++) {
+            if (!spec.pcs.includes(s % 12)) continue;
+            const gapSA = s - a;
+            if (strictSpacing && spacing === 'tight' && gapSA > 6) continue;
+            if (strictSpacing && spacing === 'wide' && (gapSA < 5 || gapSA > 12)) continue;
+            const v = [s, a, t, b];
+            if (!hasParallelFifthOrOctave(prevVoices, v)) out.push(v);
+          }
         }
       }
     }
-  } else {
-    const b = fixedNote;
-    for (let t = Math.max(b + 1, 48); t <= 64; t++) {
-      if (!spec.pcs.includes(t % 12)) continue;
-      for (let a = t + 1; a <= Math.min(72, t + 12); a++) {
-        if (!spec.pcs.includes(a % 12)) continue;
-        const gapAT = a - t;
-        if (spacing === 'tight' && gapAT > 6) continue;
-        if (spacing === 'wide' && (gapAT < 5 || gapAT > 12)) continue;
-        for (let s = a + 1; s <= Math.min(79, a + 12); s++) {
-          if (!spec.pcs.includes(s % 12)) continue;
-          const gapSA = s - a;
-          if (spacing === 'tight' && gapSA > 6) continue;
-          if (spacing === 'wide' && (gapSA < 5 || gapSA > 12)) continue;
-          const v = [s, a, t, b];
-          if (!hasParallelFifthOrOctave(prevVoices, v)) rawCandidates.push(v);
-        }
-      }
-    }
-  }
+    return out;
+  };
+
+  let rawCandidates = collectCandidates(true);
+  if (!rawCandidates.length) rawCandidates = collectCandidates(false);
+
+  const isDomChord = ['D', 'D6', 'D64', 'D7', 'D65', 'D43', 'D2'].includes(chordId);
 
   let candidates = rawCandidates.filter(v => {
+    if (isDomChord && v.filter(m => (m % 12) === leadPc).length > 1) return false;
     if (!prevVoices || prevVoices.some(x => x === null)) return true;
     if (isPrevDom7) {
       for (let vi = 1; vi <= 3; vi++) {
@@ -930,6 +952,9 @@ function solveStepVoices(prevVoices, fixedNote, isBassMode, chordId, spacing, ke
       }
       const uniquePcs = new Set(v.map(m => m % 12)).size;
       sc -= uniquePcs * 5;
+      const rootCount = v.filter(m => (m % 12) === spec.rootPc).length;
+      if (rootCount >= 2) sc -= 3;
+      if (isBassMode && (v[0] % 12) !== (v[3] % 12)) sc -= 6;
       return sc;
     };
     return score(v1) - score(v2);
@@ -942,7 +967,17 @@ function solveReferenceVoicing(steps, keyObj) {
   let prevVoices = null;
   let prevChordId = '';
   const isBassMode = hState.taskType === 'bass';
+  const allowed = H_LEVEL_PRESETS[hState.level].allowedChords;
+  const invMap = { 'T': 'T6', 'S': 'S6', 'D': 'D6' };
+
   steps.forEach(s => {
+    if (!isBassMode && prevVoices && invMap[s.chordId] && allowed.includes(invMap[s.chordId])) {
+      const spec = getChordSpec(s.chordId, keyObj);
+      const bassPc = spec.pcs[spec.bassDeg] !== undefined ? spec.pcs[spec.bassDeg] : spec.pcs[0];
+      if ((prevVoices[0] % 12) === (prevVoices[3] % 12) && (s.soprano % 12) === bassPc) {
+        s.chordId = invMap[s.chordId];
+      }
+    }
     const fixedNote = isBassMode ? s.bass : s.soprano;
     s.voices = solveStepVoices(prevVoices, fixedNote, isBassMode, s.chordId, s.spacing, keyObj, prevChordId);
     prevVoices = s.voices;
